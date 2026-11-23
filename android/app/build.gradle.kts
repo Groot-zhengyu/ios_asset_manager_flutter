@@ -44,6 +44,13 @@ kotlin {
     }
 }
 
+dependencies {
+    // google_mlkit_text_recognition 只自带 Latin 模型；识别中文必须显式引入
+    // chinese 模型，否则运行到 TextRecognizer 会抛
+    // NoClassDefFoundError: ChineseTextRecognizerOptions$Builder。
+    implementation("com.google.mlkit:text-recognition-chinese:16.0.1")
+}
+
 flutter {
     source = "../.."
 }

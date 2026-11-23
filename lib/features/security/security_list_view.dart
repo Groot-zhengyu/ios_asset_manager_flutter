@@ -8,11 +8,40 @@ import '../../models/security.dart';
 import '../../services/asset_calculator.dart';
 import '../../widgets/form_fields.dart';
 
-/// 证券列表页：顶部汇总、手动行情刷新、持仓列表与新增入口。
-class SecurityListView extends StatelessWidget {
+/// 证券列表页：顶部汇总、网络行情刷新（手动输入兜底）、持仓列表与新增入口。
+class SecurityListView extends StatefulWidget {
   const SecurityListView({super.key, required this.state});
 
   final AppState state;
+
+  @override
+  State<SecurityListView> createState() => _SecurityListViewState();
+}
+
+class _SecurityListViewState extends State<SecurityListView> {
+  bool _refreshing = false;
+
+  AppState get state => widget.state;
+
+  Future<void> _refreshFromNetwork() async {
+    if (_refreshing) return;
+    if (state.securities.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('还没有证券持仓，先添加一笔再刷新')),
+      );
+      return;
+    }
+    setState(() => _refreshing = true);
+    final result = await state.refreshPricesFromNetwork();
+    if (!mounted) return;
+    setState(() => _refreshing = false);
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        key: const ValueKey('network-refresh-snackbar'),
+        content: Text(result.summarize()),
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -22,8 +51,20 @@ class SecurityListView extends StatelessWidget {
         actions: [
           IconButton(
             key: const ValueKey('refresh-button'),
-            tooltip: '刷新行情',
-            icon: const Icon(Icons.refresh),
+            tooltip: '从网络刷新行情',
+            icon: _refreshing
+                ? const SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Icon(Icons.cloud_download),
+            onPressed: _refreshing ? null : _refreshFromNetwork,
+          ),
+          IconButton(
+            key: const ValueKey('manual-price-button'),
+            tooltip: '手动输入价格',
+            icon: const Icon(Icons.edit_note),
             onPressed: () => _showRefreshPricesDialog(context),
           ),
         ],

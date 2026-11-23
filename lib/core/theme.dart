@@ -13,7 +13,8 @@ class AppTheme {
 
   static ThemeData light() => ThemeData(
         useMaterial3: true,
-        colorSchemeSeed: const Color(0xFF2E6B5E),
+        // 与桌面图标同一套深蓝，保证品牌色一致。
+        colorSchemeSeed: const Color(0xFF204FA8),
         scaffoldBackgroundColor: const Color(0xFFF7F8FA),
         appBarTheme: const AppBarTheme(centerTitle: true),
         cardTheme: CardThemeData(

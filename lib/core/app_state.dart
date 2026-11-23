@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 
+import '../core/app_settings.dart';
 import '../core/decimal.dart';
 import '../core/errors.dart';
 import '../models/cash_account.dart';
@@ -11,15 +12,58 @@ import '../models/security.dart';
 import '../models/vehicle.dart';
 import '../repositories/app_repository.dart';
 import '../services/asset_calculator.dart';
+import '../services/data_transfer_service.dart';
+import '../services/market_data_service.dart';
+
+/// 网络行情刷新结果，供 UI 展示「更新 N 条 / 失败 M 条」。
+class MarketRefreshResult {
+  MarketRefreshResult({
+    required this.updated,
+    required this.fetched,
+    required this.failures,
+  });
+
+  /// 价格真正发生变化的条数。
+  final int updated;
+
+  /// 成功拿到有效报价的条数（含价格未变的），用于区分「刷新失败」和「价格没动」。
+  final int fetched;
+
+  final List<MarketQuoteFailure> failures;
+
+  bool get hasFailures => failures.isNotEmpty;
+
+  /// 全部报价都取到、但价格与上次一致。
+  bool get unchangedOnly => fetched > 0 && updated == 0;
+
+  /// 一条报价都没取到（网络异常或代码全错）。
+  bool get nothingFetched => fetched == 0;
+
+  /// 统一给用户看的刷新结论，避免「已更新 0 条」这种看起来像失败的提示。
+  String summarize() {
+    final failureText =
+        hasFailures ? '，失败 ${failures.length} 条（已保留上次有效价）' : '';
+    if (nothingFetched) {
+      if (hasFailures) return '未取到行情$failureText';
+      return '没有需要刷新的持仓';
+    }
+    if (unchangedOnly) return '行情已刷新，$fetched 条价格无变化$failureText';
+    return '已更新 $updated 条$failureText';
+  }
+}
 
 /// 全应用状态中心：所有写操作返回 String?（nil=成功，文案=就地错误反馈）。
 /// 口径与 SwiftUI 版保持一致：费用不计入总资产，现价必须 > 0，删除车辆级联清理费用。
 class AppState extends ChangeNotifier {
-  AppState(this.repository) {
+  AppState(this.repository, {AppSettingsStore? settings})
+      : settings = settings ?? InMemoryAppSettingsStore() {
     reload();
   }
 
   final AppRepository repository;
+
+  /// App 锁、生物识别、行情源的持久化设置（重启后仍然生效）。
+  final AppSettingsStore settings;
 
   List<Security> securities = <Security>[];
   List<Vehicle> vehicles = <Vehicle>[];
@@ -27,8 +71,9 @@ class AppState extends ChangeNotifier {
   List<Expense> expenses = <Expense>[];
   List<OCRDraft> drafts = <OCRDraft>[];
 
-  bool appLockEnabled = false;
-  String appPin = '';
+  bool get appLockEnabled => settings.lockEnabled;
+  bool get biometricEnabled => settings.biometricEnabled;
+  bool get hasPin => settings.pinHash.isNotEmpty;
 
   void reload() {
     securities = repository.fetchSecurities();
@@ -238,13 +283,78 @@ class AppState extends ChangeNotifier {
 
   // MARK: - App 锁
 
+  /// 开启时写入 PIN（只存哈希），关闭时清除 PIN。
   void setAppLock(bool enabled, {String pin = ''}) {
-    appLockEnabled = enabled;
-    appPin = pin;
+    settings.save(
+      lockEnabled: enabled,
+      pin: enabled && pin.isNotEmpty ? pin : null,
+      clearPin: !enabled,
+    );
     notifyListeners();
   }
 
-  bool verifyPin(String input) => !appLockEnabled || input == appPin;
+  void setBiometricEnabled(bool enabled) {
+    settings.save(biometricEnabled: enabled);
+    notifyListeners();
+  }
+
+  /// 未开启锁时恒为 true；开启后按哈希比对。
+  bool verifyPin(String input) {
+    if (!settings.lockEnabled) return true;
+    if (settings.pinHash.isEmpty) return true;
+    return pinHashOf(input.trim()) == settings.pinHash;
+  }
+
+  // MARK: - 网络行情
+
+  /// 从真实行情源拉取现价。只有 > 0 的价格会写回，失败保留上次有效值。
+  Future<MarketRefreshResult> refreshPricesFromNetwork({
+    MarketDataService? service,
+  }) async {
+    final market = service ?? MarketDataService();
+    final outcome = await market.fetchPrices(securities);
+    var updated = 0;
+    var fetched = 0;
+    final failures = <MarketQuoteFailure>[...outcome.failures];
+
+    for (final security in securities) {
+      final price = outcome.prices[security.code];
+      if (price == null) continue;
+      fetched += 1;
+      if (price.compareTo(security.currentPrice) == 0) continue;
+      try {
+        repository.saveSecurity(Security(
+          id: security.id,
+          type: security.type,
+          name: security.name,
+          code: security.code,
+          quantity: security.quantity,
+          costPrice: security.costPrice,
+          currentPrice: price,
+          updatedAt: DateTime.now(),
+        ));
+        updated += 1;
+      } catch (error) {
+        // 写库失败：不把错误价格留在内存里，统一以磁盘为准重新加载。
+        failures.add(MarketQuoteFailure(security.code, '保存失败：$error'));
+      }
+    }
+    reload();
+    return MarketRefreshResult(
+      updated: updated,
+      fetched: fetched,
+      failures: failures,
+    );
+  }
+
+  // MARK: - 数据导入
+
+  /// 导入原版 SwiftUI 版导出的 JSON / CSV（或本应用的 assets.json）。
+  ImportOutcome importData(String text) {
+    final outcome = DataTransferService(repository).importFromText(text);
+    reload();
+    return outcome;
+  }
 
   String? _write(void Function() action) {
     try {

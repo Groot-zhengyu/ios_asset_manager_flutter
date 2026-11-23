@@ -1,3 +1,4 @@
+import 'package:image_picker/image_picker.dart';
 import 'package:material_ui/material_ui.dart';
 
 import '../../core/app_icons.dart';
@@ -8,39 +9,102 @@ import '../../models/enums.dart';
 import '../../models/ocr_draft.dart';
 import '../../models/ocr_result.dart';
 import '../../services/ocr_field_parser.dart';
+import '../../services/ocr_service.dart';
 import '../expense/expense_list_view.dart';
 import '../../widgets/form_fields.dart';
 
-/// 快速记账页：截图识别（粘贴文字 → 解析 → 确认入库）与手动记账两个入口。
+/// 快速记账页：拍照 / 相册 OCR、粘贴文本解析、手动记账三个入口。
 /// OCR 只产出草稿，确认才生成 Expense；取消不会留下任何半成品。
 class RecordView extends StatefulWidget {
   const RecordView({
     super.key,
     required this.state,
     this.onSaved,
+    this.showAppBar = true,
   });
 
   final AppState state;
   final VoidCallback? onSaved;
+
+  /// 作为外层 Scaffold 的 body 使用时传 false，避免出现两个标题栏。
+  final bool showAppBar;
 
   @override
   State<RecordView> createState() => _RecordViewState();
 }
 
 class _RecordViewState extends State<RecordView> {
-  Future<void> _openOcr() async {
+  final OcrService _ocrService = OcrService();
+  final ImagePicker _picker = ImagePicker();
+  final OCRFieldParser _parser = OCRFieldParser();
+
+  bool _recognizing = false;
+  String? _ocrError;
+
+  @override
+  void dispose() {
+    _ocrService.dispose();
+    super.dispose();
+  }
+
+  /// 拍照或相册识别：图片在本机由 ML Kit 离线识别，不上传。
+  Future<void> _recognize(ImageSource source) async {
+    if (_recognizing) return;
+    final navigator = Navigator.of(context);
+    if (navigator.canPop()) navigator.pop();
+    setState(() {
+      _recognizing = true;
+      _ocrError = null;
+    });
+    try {
+      final picked = await _picker.pickImage(
+        source: source,
+        imageQuality: 92,
+        maxWidth: 2000,
+      );
+      if (picked == null) return;
+      final raw = await _ocrService.recognizeFile(picked.path);
+      final result = _parser.parse(raw);
+      if (!mounted) return;
+      _showOcrConfirm(result, rawText: raw.fullText);
+    } on OcrException catch (error) {
+      if (mounted) setState(() => _ocrError = error.message);
+    } catch (error) {
+      if (mounted) setState(() => _ocrError = '识别失败：$error');
+    } finally {
+      if (mounted) setState(() => _recognizing = false);
+    }
+  }
+
+  Future<void> _openOcrMenu() async {
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (_) => _OcrSourceSheet(
+        onCamera: () => _recognize(ImageSource.camera),
+        onGallery: () => _recognize(ImageSource.gallery),
+        onPaste: () {
+          Navigator.of(context).pop();
+          _openPasteSheet();
+        },
+      ),
+    );
+  }
+
+  Future<void> _openPasteSheet() async {
     await showModalBottomSheet<bool>(
       context: context,
       isScrollControlled: true,
       showDragHandle: true,
       builder: (_) => _OcrPasteSheet(
-        onParsed: _showOcrConfirm,
+        onParsed: (result, rawText) => _showOcrConfirm(result, rawText: rawText),
       ),
     );
     if (mounted) setState(() {});
   }
 
-  void _showOcrConfirm(OCRStructuredResult result) {
+  void _showOcrConfirm(OCRStructuredResult result, {String rawText = ''}) {
     showModalBottomSheet<bool>(
       context: context,
       isScrollControlled: true,
@@ -48,6 +112,7 @@ class _RecordViewState extends State<RecordView> {
       builder: (_) => _OcrConfirmSheet(
         state: widget.state,
         result: result,
+        rawText: rawText,
         onSaved: widget.onSaved,
       ),
     );
@@ -69,7 +134,7 @@ class _RecordViewState extends State<RecordView> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('快速记账')),
+      appBar: widget.showAppBar ? AppBar(title: const Text('快速记账')) : null,
       body: SafeArea(
         child: LayoutBuilder(
           builder: (context, constraints) {
@@ -81,12 +146,25 @@ class _RecordViewState extends State<RecordView> {
                   children: <Widget>[
                     _EntryCard(
                       key: const ValueKey('ocr-entry'),
-                      icon: AppIcons.ocr,
+                      icon: Icons.photo_camera_outlined,
                       color: const Color(0xFF2E6B5E),
-                      title: '截图识别',
-                      subtitle: '粘贴票据文字，自动解析金额、类型与日期',
-                      onTap: _openOcr,
+                      title: '拍照识别',
+                      subtitle: _recognizing
+                          ? '正在识别图片，请稍候…'
+                          : '相机拍照或从相册选图，自动识别金额、类型与日期',
+                      onTap: _recognizing ? () {} : _openOcrMenu,
+                      trailing: _recognizing
+                          ? const SizedBox(
+                              width: 20,
+                              height: 20,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : null,
                     ),
+                    if (_ocrError != null) ...[
+                      const SizedBox(height: 8),
+                      ErrorBanner(message: _ocrError!),
+                    ],
                     const SizedBox(height: 12),
                     _EntryCard(
                       key: const ValueKey('manual-entry'),
@@ -98,7 +176,8 @@ class _RecordViewState extends State<RecordView> {
                     ),
                     const SizedBox(height: 16),
                     Text(
-                      '提示：识别结果会先进入确认页，确认无误后才会生成费用记录。',
+                      '提示：识别结果会先进入确认页，确认无误后才会生成费用记录。'
+                      '图片只在本机识别，不会上传。',
                       style: Theme.of(context).textTheme.bodySmall,
                     ),
                   ],
@@ -120,6 +199,7 @@ class _EntryCard extends StatelessWidget {
     required this.title,
     required this.subtitle,
     required this.onTap,
+    this.trailing,
   });
 
   final IconData icon;
@@ -127,6 +207,7 @@ class _EntryCard extends StatelessWidget {
   final String title;
   final String subtitle;
   final VoidCallback onTap;
+  final Widget? trailing;
 
   @override
   Widget build(BuildContext context) {
@@ -138,18 +219,72 @@ class _EntryCard extends StatelessWidget {
         ),
         title: Text(title, style: const TextStyle(fontWeight: FontWeight.w600)),
         subtitle: Text(subtitle),
-        trailing: const Icon(Icons.chevron_right),
+        trailing: trailing ?? const Icon(Icons.chevron_right),
         onTap: onTap,
       ),
     );
   }
 }
 
-/// 第一步：粘贴票据 OCR 文字并解析。
+/// 识别来源选择：拍照 / 相册 / 粘贴文本（兜底）。
+class _OcrSourceSheet extends StatelessWidget {
+  const _OcrSourceSheet({
+    required this.onCamera,
+    required this.onGallery,
+    required this.onPaste,
+  });
+
+  final VoidCallback onCamera;
+  final VoidCallback onGallery;
+  final VoidCallback onPaste;
+
+  @override
+  Widget build(BuildContext context) {
+    return SafeArea(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: <Widget>[
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 4, 20, 8),
+            child: Text(
+              '选择识别方式',
+              style: Theme.of(context).textTheme.titleMedium,
+              textAlign: TextAlign.center,
+            ),
+          ),
+          ListTile(
+            key: const ValueKey('ocr-camera'),
+            leading: const Icon(Icons.photo_camera),
+            title: const Text('拍照识别'),
+            subtitle: const Text('对准票据拍照，自动识别'),
+            onTap: onCamera,
+          ),
+          ListTile(
+            key: const ValueKey('ocr-gallery'),
+            leading: const Icon(Icons.photo_library),
+            title: const Text('从相册选择'),
+            subtitle: const Text('选一张已有的票据截图'),
+            onTap: onGallery,
+          ),
+          ListTile(
+            key: const ValueKey('ocr-paste'),
+            leading: const Icon(Icons.content_paste),
+            title: const Text('粘贴文本解析'),
+            subtitle: const Text('已复制票据文字时使用'),
+            onTap: onPaste,
+          ),
+          const SizedBox(height: 8),
+        ],
+      ),
+    );
+  }
+}
+
+/// 第一步：粘贴票据 OCR 文字并解析（拍照识别不可用的兜底路径）。
 class _OcrPasteSheet extends StatefulWidget {
   const _OcrPasteSheet({required this.onParsed});
 
-  final ValueChanged<OCRStructuredResult> onParsed;
+  final void Function(OCRStructuredResult result, String rawText) onParsed;
 
   @override
   State<_OcrPasteSheet> createState() => _OcrPasteSheetState();
@@ -180,7 +315,7 @@ class _OcrPasteSheetState extends State<_OcrPasteSheet> {
     );
     final result = OCRFieldParser().parse(raw);
     Navigator.of(context).pop();
-    widget.onParsed(result);
+    widget.onParsed(result, text);
   }
 
   @override
@@ -233,11 +368,13 @@ class _OcrConfirmSheet extends StatefulWidget {
   const _OcrConfirmSheet({
     required this.state,
     required this.result,
+    this.rawText = '',
     this.onSaved,
   });
 
   final AppState state;
   final OCRStructuredResult result;
+  final String rawText;
   final VoidCallback? onSaved;
 
   @override
@@ -389,6 +526,33 @@ class _OcrConfirmSheetState extends State<_OcrConfirmSheet> {
                       child: Text(
                         '置信度较低，请核对',
                         style: TextStyle(color: Color(0xFF856404)),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            if (widget.rawText.trim().isNotEmpty)
+              Theme(
+                data: Theme.of(context)
+                    .copyWith(dividerColor: Colors.transparent),
+                child: ExpansionTile(
+                  key: const ValueKey('ocr-raw-text'),
+                  tilePadding: EdgeInsets.zero,
+                  childrenPadding: const EdgeInsets.only(bottom: 8),
+                  title: const Text('查看识别原文'),
+                  children: <Widget>[
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: Theme.of(context)
+                            .colorScheme
+                            .surfaceContainerHighest,
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: SelectableText(
+                        widget.rawText,
+                        style: const TextStyle(fontSize: 12),
                       ),
                     ),
                   ],

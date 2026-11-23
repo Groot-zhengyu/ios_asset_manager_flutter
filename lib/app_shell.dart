@@ -4,6 +4,7 @@ import 'package:material_ui/material_ui.dart';
 import 'package:path_provider/path_provider.dart';
 
 import 'core/app_icons.dart';
+import 'core/app_settings.dart';
 import 'core/app_state.dart';
 import 'core/theme.dart';
 import 'features/expense/expense_list_view.dart';
@@ -14,13 +15,16 @@ import 'features/security/security_list_view.dart';
 import 'features/settings/settings_view.dart';
 import 'features/vehicle/vehicle_list_view.dart';
 import 'repositories/app_repository.dart';
+import 'services/biometric_service.dart';
 
 Future<void> bootstrapApp() async {
   WidgetsFlutterBinding.ensureInitialized();
   final directory = await getApplicationDocumentsDirectory();
   final repository = JsonAppRepository(File('${directory.path}/assets.json'))
     ..load();
-  runApp(AssetApp(state: AppState(repository)));
+  final settings =
+      JsonAppSettingsStore(File('${directory.path}/settings.json'))..load();
+  runApp(AssetApp(state: AppState(repository, settings: settings)));
 }
 
 class AssetApp extends StatefulWidget {
@@ -35,7 +39,9 @@ class AssetApp extends StatefulWidget {
 class _AssetAppState extends State<AssetApp> with WidgetsBindingObserver {
   int _tab = 0;
   bool _locked = false;
+  bool _biometricBusy = false;
   final TextEditingController _pinController = TextEditingController();
+  final BiometricService _biometric = BiometricService();
   String? _pinError;
 
   @override
@@ -43,6 +49,9 @@ class _AssetAppState extends State<AssetApp> with WidgetsBindingObserver {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _locked = widget.state.appLockEnabled;
+    if (_locked) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => _tryBiometric());
+    }
   }
 
   @override
@@ -69,6 +78,24 @@ class _AssetAppState extends State<AssetApp> with WidgetsBindingObserver {
   }
 
   void _jumpToTab(int index) => setState(() => _tab = index);
+
+  /// 生物识别解锁：可用时自动弹一次，失败不打断，用户仍可输 PIN。
+  Future<void> _tryBiometric() async {
+    if (!mounted || !widget.state.biometricEnabled) return;
+    if (!await _biometric.isAvailable()) return;
+    if (!mounted) return;
+    setState(() => _biometricBusy = true);
+    final passed = await _biometric.authenticate();
+    if (!mounted) return;
+    setState(() {
+      _biometricBusy = false;
+      if (passed) {
+        _locked = false;
+        _pinError = null;
+        _pinController.clear();
+      }
+    });
+  }
 
   void _unlock() {
     if (widget.state.verifyPin(_pinController.text)) {
@@ -113,8 +140,24 @@ class _AssetAppState extends State<AssetApp> with WidgetsBindingObserver {
                     const SizedBox(height: 16),
                     Text('已锁定', style: Theme.of(context).textTheme.headlineSmall),
                     const SizedBox(height: 8),
-                    const Text('请输入应用 PIN 以继续'),
-                    const SizedBox(height: 16),
+                    Text(
+                      widget.state.biometricEnabled
+                          ? '可用指纹 / 面容解锁，或输入 PIN'
+                          : '请输入应用 PIN 以继续',
+                      textAlign: TextAlign.center,
+                    ),
+                    if (widget.state.biometricEnabled) ...[
+                      const SizedBox(height: 20),
+                      FilledButton.icon(
+                        key: const ValueKey('biometric-unlock-button'),
+                        onPressed: _biometricBusy ? null : _tryBiometric,
+                        icon: const Icon(Icons.fingerprint),
+                        label: Text(_biometricBusy ? '验证中…' : '指纹 / 面容解锁'),
+                      ),
+                      const SizedBox(height: 12),
+                      Text('或', style: Theme.of(context).textTheme.bodySmall),
+                    ],
+                    const SizedBox(height: 12),
                     TextField(
                       key: const ValueKey('pin-input'),
                       controller: _pinController,
@@ -223,8 +266,8 @@ class _RecordTabState extends State<_RecordTab> {
           ),
           Expanded(
             child: _section == 0
-                ? RecordView(state: widget.state)
-                : ExpenseListView(state: widget.state),
+                ? RecordView(state: widget.state, showAppBar: false)
+                : ExpenseListView(state: widget.state, showAppBar: false),
           ),
         ],
       ),

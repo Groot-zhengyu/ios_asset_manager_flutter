@@ -11,7 +11,7 @@
 
 一套 Flutter 代码同时产出 Android / iOS 的离线资产管理 App。功能口径对齐原 SwiftUI 版，但**代码完全独立、数据不互通**。
 
-当前状态：**全量功能已实现并通过验证**，Android debug APK 已构建成功。iOS 因开发环境是 Windows，尚未构建验证。
+当前状态：**功能完整**（42 个自动化测试全绿），Android debug APK 构建成功并已在 API 35 模拟器完成端到端实测（OCR、真实行情、导出导入、App 锁、持久化均已跑通）。iOS 因开发环境是 Windows，尚未构建验证。
 
 ---
 
@@ -50,7 +50,7 @@ export FLUTTER_STORAGE_BASE_URL=https://storage.flutter-io.cn
   ```
 - 确保 `JAVA_HOME` 指向 JDK 21，且 `PATH` 包含 `$JAVA_HOME/bin`。
 
-### 4. 三个已踩过的坑（换电脑大概率复现）
+### 4. 已踩过的坑（换电脑大概率复现）
 
 1. **Gradle 分发包下载慢 / 损坏**
    `services.gradle.org` 在国内经常下到一半，报 `java.util.zip.ZipException: zip END header not found`。
@@ -65,6 +65,32 @@ export FLUTTER_STORAGE_BASE_URL=https://storage.flutter-io.cn
 
 3. **Maven 依赖下载慢**
    已在 `android/settings.gradle.kts` 和 `android/build.gradle.kts` 加入阿里云镜像（google / central / gradle-plugin）。
+
+4. **Kotlin 增量编译缓存损坏**
+   构建被强制中断后（Ctrl+C、杀进程）会报 `Could not close incremental caches ... class-fq-name-to-source.tab`。
+   解决：删掉 `build/*/kotlin` 下缓存；`android/gradle.properties` 已设 `kotlin.incremental=false` 避免复发（代价是首次编译慢一点）。
+
+5. **模拟器（可选）**
+   ```bash
+   sdkmanager "emulator" "system-images;android-35;google_apis;x86_64"
+   avdmanager create avd -n asset_pixel -k "system-images;android-35;google_apis;x86_64" -d pixel_6
+   emulator -avd asset_pixel -gpu host -memory 4096 -cores 4   # 软渲染会卡到 System UI 无响应
+   ```
+   adb 若显示 `offline` 但 `shell` 能用，`adb kill-server && adb start-server` 重连即可。
+   实测：本机在 Hyper-V + `-no-window` 下 `-gpu host` 拿不到 Surface（启动画面卡住、日志 `NO_SURFACE`），
+   必须用 `-gpu swiftshader_indirect`；软渲染慢但可用，操作前先等系统 idle 再点，避免 System UI ANR。
+
+6. **ML Kit 中文模型必须单独引入（否则运行时崩溃）**
+   `google_mlkit_text_recognition` 只自带 Latin 模型。若代码里用
+   `TextRecognitionScript.chinese`，必须在 `android/app/build.gradle.kts` 加：
+   ```kotlin
+   dependencies {
+       implementation("com.google.mlkit:text-recognition-chinese:16.0.1")
+   }
+   ```
+   否则点「拍照识别」会直接 `NoClassDefFoundError: ChineseTextRecognizerOptions$Builder` 崩溃。
+   **静态分析和单元测试都发现不了这个坑**，只能在真机/模拟器上点一次识别。
+   iOS 侧对应的是 `GoogleMLKit/TextRecognitionChinese` pod，首次在 Mac 上 pod install 后需确认已包含。
 
 ### 5. 拉取与验证
 
@@ -110,19 +136,9 @@ lib/
 └── widgets/form_fields.dart  # MoneyField / ErrorBanner / SaveButton
 ```
 
-### 遗留代码（早期最小闭环产物，主应用**不引用**）
+### 遗留代码（已清理）
 
-以下文件只被两个旧测试引用，**可以安全删除**，接手时不必困惑：
-
-- `lib/widgets/security_edit_sheet.dart`
-- `lib/widgets/security_list_page.dart`
-- `lib/viewmodels/security_list_controller.dart`
-- `lib/repositories/security_repository.dart`
-- `test/security_edit_sheet_test.dart`
-- `test/security_form_test.dart`
-
-活跃的对应实现在 `lib/features/security/` 与 `test/security_vehicle_test.dart`。
-注意：两个旧测试覆盖的"现价 0 拒绝 / 保存失败提示"等逻辑，新实现里也有等价测试覆盖，删除不会降低有效覆盖率。
+早期最小闭环阶段的 6 个重复实现（`widgets/security_edit_sheet.dart`、`widgets/security_list_page.dart`、`viewmodels/security_list_controller.dart`、`repositories/security_repository.dart` 及两个旧测试）已于本轮删除。活跃实现统一在 `lib/features/security/`，等价测试在 `test/security_vehicle_test.dart` 与 `test/security_edit_feedback_test.dart`。
 
 ---
 
@@ -160,15 +176,25 @@ lib/
 flutter analyze
 flutter test
 flutter build apk --debug       # → build/app/outputs/flutter-apk/app-debug.apk
-flutter build apk --release     # 发布用（会小很多，debug 版约 154M）
+flutter build apk --release     # 发布用（会小很多，debug 版约 222M，含 ML Kit 模型）
 ```
 
-测试分布（共 26 个）：
+测试分布（共 42 个）：
 - `money_test.dart`：Dec 解析/运算/格式化
-- `security_form_test.dart` + `security_edit_sheet_test.dart`：遗留，见第三节
 - `security_vehicle_test.dart`：证券保存/现价校验/车辆级联删除
+- `security_edit_feedback_test.dart`：现价 0 / 必填缺失**在表单内就地报错**、千分位与货币符号可保存
 - `expense_flow_test.dart`：费用保存、OCR 解析、草稿确认
 - `overview_view_test.dart`：总览渲染与快速记账回调
+- `market_data_test.dart`：腾讯行情文本解析、0 价与 500 失败保留、天天基金 JSONP 估值/净值回落
+- `market_refresh_summary_test.dart`：刷新结论的四种文案（更新 / 价格无变化 / 未取到 / 无需刷新）
+- `data_transfer_test.dart`：原版 JSON / CSV 导入、按 id 去重、导出格式、设置持久化与 PIN 哈希
+
+集成测试（真机/模拟器）：
+```bash
+adb push test_receipt.png /sdcard/Download/receipt.png
+flutter test integration_test/app_integration_test.dart -d <deviceId>
+```
+覆盖：ML Kit 真实识别中文票据、五标签切换无溢出、导出面板渲染、真机新增证券保存。
 
 ### iOS 构建（必须在 macOS + Xcode 上）
 
@@ -186,17 +212,51 @@ flutter build ipa --release
 
 ## 七、已知限制与待办（接手后按优先级）
 
-这些是**明确还没做**的，不要以为已经完成：
+> 2026-11-23 更新：原先的九项待办里，第 1-4、5（数据互通）、6（CI）、9（图标）已完成，见下方「已完成」；真正还没做的只剩 iOS 构建验证。
 
-1. **OCR 是"粘贴文本解析"，不是真机拍照识别**。当前流程靠用户把票据文字粘贴进来，`OCRFieldParser` 解析。若要真拍照识别，需接入 `google_mlkit_text_recognition` 之类插件 + 相册/相机权限（双端权限配置）。
-2. **App 锁只有 PIN，没有 Face ID / Touch ID**。原版用 `LocalAuthentication`，Flutter 版需接 `local_auth` 插件。
-3. **行情刷新是手动填「代码,价格」**，没有真实网络行情源。原版也是手动策略，但若要自动同步需接数据源。
-4. **CSV 导出是弹窗展示可复制文本**，没有系统分享面板 / 保存为文件。需接 `share_plus` + `path_provider`。
-5. **与原 SwiftUI 版数据不互通**。Flutter 用 JSON，原版用 SwiftData。若用户之前在原版录过数据，需要写导出/导入转换工具（CSV 是较好的中间格式，两边都已有导出能力）。
-6. **没有 CI**。原 SwiftUI 仓库有 GitHub Actions 云构建；本仓库尚未配置。建议加一个 workflow 跑 `flutter analyze && flutter test`，Android APK 构建可选。
-7. **iOS 未构建验证**（见第六节）。
-8. 遗留代码清理（见第三节），可选。
-9. 应用图标用的是 Flutter 默认图标，未替换成资产管家的定制图标。
+### 已完成（本轮补齐）
+
+1. **拍照 / 相册 OCR**：`services/ocr_service.dart` 用 `google_mlkit_text_recognition` 中文模型在本机识别，`image_picker` 提供相机与相册入口；粘贴文本保留为兜底。图片不出设备。
+2. **指纹 / 面容解锁**：`services/biometric_service.dart` + `local_auth`，PIN 保留为兜底；`MainActivity` 已改为 `FlutterFragmentActivity`（local_auth 硬性要求），Android 加了 `USE_BIOMETRIC`，iOS 加了 `NSFaceIDUsageDescription`。
+3. **真实行情**：`services/market_data_service.dart`，股票走腾讯 `qt.gtimg.cn`（GBK，按 `~` 取第 4 字段），基金走天天基金估值 `fundgz.1234567.com.cn`；只写回 > 0 的价格，失败保留原值。手动输入价格降级为折叠的兜底入口。
+4. **导出走系统分享**：`services/data_transfer_service.dart` 写临时文件后调 `share_plus`，分享面板可保存到文件 / 发送；同时保留「复制 CSV 文本」。
+5. **与原版数据互通**：同一服务实现导入，支持原版 `ExportDocument` JSON（金额可能是数字或字符串）与原版三段式 CSV；按 `id` 去重合并，重复导入不产生重复记录。
+6. **CI**：`.github/workflows/ci.yml`，analyze + test 后构建 Release APK 并上传产物。
+7. **应用图标**：`assets/icon/` + `flutter_launcher_icons` 已生成 Android（含 adaptive）与 iOS 全套图标。
+8. **生物识别默认关闭**：`biometricEnabled` 默认值改为 `false`。原因：未录入指纹的设备上开启 App 锁会立刻自动弹生物识别并直接失败。现在锁屏只显示 PIN + 一个可点的「指纹 / 面容解锁」按钮，用户在设置页看到「可用：指纹」后再手动开启。
+9. **行情刷新结论文案**：`MarketRefreshResult` 增加 `fetched` 与 `summarize()`。原先价格没变化时提示「已更新 0 条」看起来像失败；现在区分「已更新 N 条」/「行情已刷新，N 条价格无变化」/「未取到行情」/「没有需要刷新的持仓」四种结论（`test/market_refresh_summary_test.dart` 覆盖）。
+10. **Gradle 堆下调**：`-Xmx8G` 在 16G 机器上与模拟器并存时会疯狂换页，表现为构建长时间无输出（CPU 不涨），已改为 `-Xmx3G`。
+
+### 仍未完成
+
+1. **iOS 从未构建验证**（见第六节）。首次在 Mac 上编译请预留排查时间。
+2. **iOS 的中文 OCR 受插件限制**：`google_mlkit_text_recognition` 在 iOS 上只支持 Latin 字符集，请求中文会优雅回退到 Latin 识别器——不会崩溃，但中文会被识别成乱码（数字、金额通常仍可识别）。若要在 iOS 上真正识别中文票据，需要自己写 platform channel 调用 Apple Vision（`VNRecognizeTextRequest` + `zh-Hans`），或换用其他 OCR 方案。Android 侧中文识别是完整可用的。
+3. **模拟器无法验证的两项**：相机拍照（模拟器无真实摄像头，只能用相册选图）与生物识别（模拟器未录入指纹；强制触发 `BiometricPrompt` 会让 x86_64 模拟器的指纹 HAL 挂掉，实测三次都在弹窗瞬间整个 emulator 进程退出）。代码路径已实现，需真机确认。
+4. 行情接口是免费公开接口，字段可能变化；若某天全部失败，先看 `MarketDataService` 的解析分支。
+5. 金额精度目前是 1e-6 定点，够用；若将来要支持更多小数位需改 `Dec` 的 `_scale` 并全量回归。
+
+### 本轮实测记录（Android 模拟器 API 35，720×1600 覆盖分辨率）
+
+端到端跑通的完整链路（均为真实数据，非 mock）：
+
+| 模块 | 实测结果 |
+|---|---|
+| OCR 拍照识别 | 相册选真实票据图 → ML Kit 中文识别「油费 / ¥300.00 / 2026-11-20 / 中国石化」，置信度 81%；确认入库后费用明细出现该记录，总支出同步 ¥300.00 |
+| 证券 + 真实行情 | 新增 600519（100 股 @1500.50），点云刷新拉到真实价 1680.25 → 再次刷新跌到 1439.00，盈亏 -¥6,150（-4.10%）；600036 拉到 43.26（+23.60%）；涨红跌绿正确 |
+| 刷新文案 | 价格变化时「已更新 1 条」；价格没动时「行情已刷新，2 条价格无变化」（修复前是误导性的「已更新 0 条」） |
+| 车辆 | 新增 ModelY / A12345 / 购入 20 万 / 估值 15 万，车辆总资产 ¥150,000.00 |
+| 导出 | 系统分享面板正常弹出「Sharing 1 file / assets-20261123-2045.json」；读回文件校验结构 `exportedAt/currency/expenses/securities/vehicles/cashAccounts`，与原版 `ExportDocument` 同构 |
+| 导入 | 导入原版样例（证券 1 / 费用 1 / 现金 1）→ 对话框「导入完成：证券 1、车辆 0、费用 1、现金 1」；总资产从 ¥318,025 合并为 ¥388,700，占比 48.03%，口径完全对上 |
+| App 锁 | PIN 1234 设置成功；杀掉进程重启仍是锁屏（`settings.json` 持久化生效）；错 PIN 提示「验证未通过，请重试」；正确 PIN 正常解锁 |
+| 数据持久化 | 模拟器冷重启后资产、费用、车辆、现金账户全部完整 |
+
+其它问题与处理：
+
+- `RecordView` 原先嵌在 `_RecordTab` 的 Scaffold 里导致**双标题栏**，已通过 `showAppBar: false` 修复。
+- 主题色原为墨绿 `#2E6B5E`，与深蓝图标不一致，已改为品牌蓝 `#204FA8`。
+- 模拟器为软件渲染（swiftshader）时负载极高，会出现 `System UI isn't responding`；改用 `-gpu host` 或减少并行构建可缓解。
+- 模拟器网络不通时行情刷新会全部计入 failures 并保留原值（符合设计），这是预期行为而非 bug。
+- 模拟器无窗口启动命令（本机验证可用）：`emulator -avd asset_pixel -no-snapshot -no-audio -no-boot-anim -no-window -gpu swiftshader_indirect`，且必须在同一 shell 里先 `adb start-server`，否则 emulator 会因「Unable to connect to adb daemon」自行退出。
 
 ---
 

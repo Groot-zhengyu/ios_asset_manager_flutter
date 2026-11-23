@@ -7,7 +7,13 @@
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleDisplayName</key>
-	<string>Ios Asset Manager Flutter</string>
+	<string>资产管家</string>
+	<key>NSCameraUsageDescription</key>
+	<string>使用相机拍摄票据，仅在本机识别金额与日期，不会上传。</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>从相册选择票据截图进行识别，仅在本机处理。</string>
+	<key>NSFaceIDUsageDescription</key>
+	<string>使用面容 ID 解锁资产管家，保护你的资产数据。</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>

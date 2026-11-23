@@ -16,10 +16,14 @@ class ExpenseListView extends StatefulWidget {
     super.key,
     required this.state,
     this.onSaved,
+    this.showAppBar = true,
   });
 
   final AppState state;
   final VoidCallback? onSaved;
+
+  /// 嵌在外层 Scaffold 里时传 false，避免重复标题栏。
+  final bool showAppBar;
 
   @override
   State<ExpenseListView> createState() => _ExpenseListViewState();
@@ -92,7 +96,7 @@ class _ExpenseListViewState extends State<ExpenseListView> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('费用明细')),
+      appBar: widget.showAppBar ? AppBar(title: const Text('费用明细')) : null,
       body: SafeArea(
         child: LayoutBuilder(
           builder: (context, constraints) {

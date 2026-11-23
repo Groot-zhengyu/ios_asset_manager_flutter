@@ -1,6 +1,9 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- 行情刷新需要联网；App 锁使用指纹/面容需要生物识别权限。 -->
+    <uses-permission android:name="android.permission.INTERNET"/>
+    <uses-permission android:name="android.permission.USE_BIOMETRIC"/>
     <application
-        android:label="ios_asset_manager_flutter"
+        android:label="资产管家"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
         <activity
