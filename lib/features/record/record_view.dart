@@ -5,6 +5,7 @@ import '../../core/app_icons.dart';
 import '../../core/app_state.dart';
 import '../../core/date_format.dart';
 import '../../core/decimal.dart';
+import '../../core/responsive.dart';
 import '../../models/enums.dart';
 import '../../models/ocr_draft.dart';
 import '../../models/ocr_result.dart';
@@ -98,7 +99,8 @@ class _RecordViewState extends State<RecordView> {
       isScrollControlled: true,
       showDragHandle: true,
       builder: (_) => _OcrPasteSheet(
-        onParsed: (result, rawText) => _showOcrConfirm(result, rawText: rawText),
+        onParsed: (result, rawText) =>
+            _showOcrConfirm(result, rawText: rawText),
       ),
     );
     if (mounted) setState(() {});
@@ -123,10 +125,8 @@ class _RecordViewState extends State<RecordView> {
       context: context,
       isScrollControlled: true,
       showDragHandle: true,
-      builder: (_) => ExpenseEditSheet(
-        state: widget.state,
-        onSaved: widget.onSaved,
-      ),
+      builder: (_) =>
+          ExpenseEditSheet(state: widget.state, onSaved: widget.onSaved),
     );
     if (mounted) setState(() {});
   }
@@ -140,7 +140,9 @@ class _RecordViewState extends State<RecordView> {
           builder: (context, constraints) {
             return Center(
               child: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 720),
+                constraints: BoxConstraints(
+                  maxWidth: Responsive.contentMaxWidthOf(context),
+                ),
                 child: ListView(
                   padding: const EdgeInsets.all(16),
                   children: <Widget>[
@@ -392,8 +394,9 @@ class _OcrConfirmSheetState extends State<_OcrConfirmSheet> {
   void initState() {
     super.initState();
     final result = widget.result;
-    _amountController =
-        TextEditingController(text: result.amount?.plainAmountString ?? '');
+    _amountController = TextEditingController(
+      text: result.amount?.plainAmountString ?? '',
+    );
     _noteController = TextEditingController(text: result.note ?? '');
     _type = result.type ?? ExpenseType.other;
     _occurredAt = result.date ?? DateTime.now();
@@ -455,9 +458,8 @@ class _OcrConfirmSheetState extends State<_OcrConfirmSheet> {
     }
 
     widget.onSaved?.call();
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('识别结果已入库')),
-    );
+    ScaffoldMessenger.of(context)
+        .showSnackBar(const SnackBar(content: Text('识别结果已入库')));
     _amountController.clear();
     _noteController.clear();
     final navigator = Navigator.of(context);

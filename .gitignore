@@ -11,3 +11,7 @@ build/
 *.iml
 build-output/
 *.apk
+
+# Kotlin/Gradle 构建临时文件
+.kotlin/
+**/.kotlin/

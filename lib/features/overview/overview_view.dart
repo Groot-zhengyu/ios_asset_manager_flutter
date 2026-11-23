@@ -5,6 +5,7 @@ import 'package:material_ui/material_ui.dart';
 import '../../core/app_icons.dart';
 import '../../core/app_state.dart';
 import '../../core/decimal.dart';
+import '../../core/responsive.dart';
 import '../../core/theme.dart';
 import '../../models/enums.dart';
 import '../../services/asset_calculator.dart';
@@ -54,11 +55,11 @@ class _OverviewViewState extends State<OverviewView>
 
   /// 分类对应的标签页：0=总览 1=记账 2=证券 3=车辆 4=设置。
   static int _tabIndexFor(AssetCategory category) => switch (category) {
-        AssetCategory.stock => 2,
-        AssetCategory.fund => 2,
-        AssetCategory.vehicle => 3,
-        AssetCategory.cash => 1,
-      };
+    AssetCategory.stock => 2,
+    AssetCategory.fund => 2,
+    AssetCategory.vehicle => 3,
+    AssetCategory.cash => 1,
+  };
 
   Widget _entrance(int index, Widget child) {
     return TweenAnimationBuilder<double>(
@@ -79,7 +80,9 @@ class _OverviewViewState extends State<OverviewView>
           builder: (context, constraints) {
             return Center(
               child: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 720),
+                constraints: BoxConstraints(
+                  maxWidth: Responsive.contentMaxWidthOf(context),
+                ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: <Widget>[
@@ -157,9 +160,8 @@ class _TotalAssetsCard extends StatelessWidget {
                 child: Text(
                   Dec.fromMicros(micros).currencyString,
                   maxLines: 1,
-                  style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                        fontWeight: FontWeight.bold,
-                      ),
+                  style: Theme.of(context).textTheme.headlineMedium
+                      ?.copyWith(fontWeight: FontWeight.bold),
                 ),
               ),
             ),
@@ -180,7 +182,8 @@ class _TotalAssetsCard extends StatelessWidget {
                       child: Text(
                         Dec.fromMicros(micros).signedCurrencyString,
                         maxLines: 1,
-                        style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        style: Theme.of(context).textTheme.titleMedium
+                            ?.copyWith(
                               color: AppTheme.profitColor(micros),
                               fontWeight: FontWeight.w600,
                             ),
@@ -214,23 +217,19 @@ const List<Color> _segmentColors = <Color>[
 ];
 
 List<_DonutSegment> _segmentsOf(AssetSnapshot snapshot) => <_DonutSegment>[
-      _DonutSegment(
-          AssetCategory.stock, snapshot.stockValue, _segmentColors[0]),
-      _DonutSegment(AssetCategory.fund, snapshot.fundValue, _segmentColors[1]),
-      _DonutSegment(
-        AssetCategory.vehicle,
-        snapshot.vehicleValue,
-        _segmentColors[2],
-      ),
-      _DonutSegment(AssetCategory.cash, snapshot.cashValue, _segmentColors[3]),
-    ];
+  _DonutSegment(AssetCategory.stock, snapshot.stockValue, _segmentColors[0]),
+  _DonutSegment(AssetCategory.fund, snapshot.fundValue, _segmentColors[1]),
+  _DonutSegment(
+    AssetCategory.vehicle,
+    snapshot.vehicleValue,
+    _segmentColors[2],
+  ),
+  _DonutSegment(AssetCategory.cash, snapshot.cashValue, _segmentColors[3]),
+];
 
 /// 资产分类环形图：CustomPainter 手绘 + 进场动画 + 中文图例与金额。
 class _CategoryDonut extends StatelessWidget {
-  const _CategoryDonut({
-    required this.animation,
-    required this.snapshot,
-  });
+  const _CategoryDonut({required this.animation, required this.snapshot});
 
   final Animation<double> animation;
   final AssetSnapshot snapshot;
@@ -251,13 +250,14 @@ class _CategoryDonut extends StatelessWidget {
               child: AnimatedBuilder(
                 animation: animation,
                 builder: (context, child) => SizedBox(
-                  width: 180,
-                  height: 180,
+                  width: Responsive.donutSizeOf(context),
+                  height: Responsive.donutSizeOf(context),
                   child: CustomPaint(
                     key: const ValueKey('asset-donut'),
                     painter: _DonutPainter(
                       segments: segments,
                       progress: animation.value,
+                      strokeWidth: Responsive.donutStrokeOf(context),
                     ),
                     child: Center(
                       child: Text(
@@ -291,10 +291,17 @@ class _CategoryDonut extends StatelessWidget {
 
 /// 手绘 donut：按各分类金额占比绘制圆弧，progress 控制进场扫描。
 class _DonutPainter extends CustomPainter {
-  const _DonutPainter({required this.segments, required this.progress});
+  const _DonutPainter({
+    required this.segments,
+    required this.progress,
+    this.strokeWidth = 22.0,
+  });
 
   final List<_DonutSegment> segments;
   final double progress;
+
+  /// 描边宽度由响应式工具按屏幕尺寸计算后传入，默认兼容旧调用。
+  final double strokeWidth;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -302,7 +309,6 @@ class _DonutPainter extends CustomPainter {
       0,
       (sum, segment) => sum + segment.value.micros.abs(),
     );
-    const strokeWidth = 22.0;
     final rect = Rect.fromLTWH(
       strokeWidth / 2,
       strokeWidth / 2,
@@ -344,7 +350,9 @@ class _DonutPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant _DonutPainter oldDelegate) =>
-      oldDelegate.progress != progress || oldDelegate.segments != segments;
+      oldDelegate.progress != progress ||
+      oldDelegate.segments != segments ||
+      oldDelegate.strokeWidth != strokeWidth;
 }
 
 class _LegendItem extends StatelessWidget {
@@ -407,9 +415,8 @@ class _CategoryList extends StatelessWidget {
             subtitle: Text('占比 ${ratio.percentString}'),
             trailing: Text(
               segment.value.currencyString,
-              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    fontWeight: FontWeight.w500,
-                  ),
+              style: Theme.of(context).textTheme.bodyMedium
+                  ?.copyWith(fontWeight: FontWeight.w500),
             ),
             onTap: onJumpToTab == null
                 ? null

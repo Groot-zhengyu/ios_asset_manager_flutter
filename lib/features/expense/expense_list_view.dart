@@ -4,6 +4,7 @@ import '../../core/app_icons.dart';
 import '../../core/app_state.dart';
 import '../../core/date_format.dart';
 import '../../core/decimal.dart';
+import '../../core/responsive.dart';
 import '../../models/enums.dart';
 import '../../models/expense.dart';
 import '../../models/forms.dart';
@@ -33,10 +34,10 @@ enum _DateRange { week, month, all }
 
 extension _DateRangeX on _DateRange {
   String get label => switch (this) {
-        _DateRange.week => '近7天',
-        _DateRange.month => '近30天',
-        _DateRange.all => '全部',
-      };
+    _DateRange.week => '近7天',
+    _DateRange.month => '近30天',
+    _DateRange.all => '全部',
+  };
 }
 
 class _ExpenseListViewState extends State<ExpenseListView> {
@@ -57,14 +58,13 @@ class _ExpenseListViewState extends State<ExpenseListView> {
         return false;
       }
       return true;
-    }).toList()
-      ..sort((a, b) => b.occurredAt.compareTo(a.occurredAt));
+    }).toList()..sort((a, b) => b.occurredAt.compareTo(a.occurredAt));
   }
 
   Dec _subtotal(ExpenseType type) => widget.state.expenses.fold<Dec>(
-        Dec.zero,
-        (sum, expense) => expense.type == type ? sum + expense.amount : sum,
-      );
+    Dec.zero,
+    (sum, expense) => expense.type == type ? sum + expense.amount : sum,
+  );
 
   Future<void> _openEdit({Expense? editing}) async {
     await showModalBottomSheet<bool>(
@@ -88,9 +88,8 @@ class _ExpenseListViewState extends State<ExpenseListView> {
     }
     setState(() => _error = null);
     widget.onSaved?.call();
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('已删除费用记录')),
-    );
+    ScaffoldMessenger.of(context)
+        .showSnackBar(const SnackBar(content: Text('已删除费用记录')));
   }
 
   @override
@@ -102,7 +101,9 @@ class _ExpenseListViewState extends State<ExpenseListView> {
           builder: (context, constraints) {
             return Center(
               child: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 720),
+                constraints: BoxConstraints(
+                  maxWidth: Responsive.contentMaxWidthOf(context),
+                ),
                 child: Column(
                   children: <Widget>[
                     _SummaryCard(
@@ -119,8 +120,9 @@ class _ExpenseListViewState extends State<ExpenseListView> {
                             child: DropdownButtonFormField<ExpenseType?>(
                               key: const ValueKey('expense-type-filter'),
                               initialValue: _typeFilter,
-                              decoration:
-                                  const InputDecoration(labelText: '类型'),
+                              decoration: const InputDecoration(
+                                labelText: '类型',
+                              ),
                               items: <DropdownMenuItem<ExpenseType?>>[
                                 const DropdownMenuItem<ExpenseType?>(
                                   value: null,
@@ -276,9 +278,8 @@ class _SummaryCard extends StatelessWidget {
             Text(
               total.currencyString,
               key: const ValueKey('expense-total'),
-              style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                    fontWeight: FontWeight.bold,
-                  ),
+              style: Theme.of(context).textTheme.headlineSmall
+                  ?.copyWith(fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 12),
             Row(
@@ -401,9 +402,8 @@ class _ExpenseEditSheetState extends State<ExpenseEditSheet> {
       return;
     }
     widget.onSaved?.call();
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('费用已保存')),
-    );
+    ScaffoldMessenger.of(context)
+        .showSnackBar(const SnackBar(content: Text('费用已保存')));
     final navigator = Navigator.of(context);
     if (navigator.canPop()) navigator.pop(true);
   }
@@ -489,10 +489,7 @@ class _ExpenseEditSheetState extends State<ExpenseEditSheet> {
               initialValue: _vehicleId,
               decoration: const InputDecoration(labelText: '关联车辆'),
               items: <DropdownMenuItem<String>>[
-                const DropdownMenuItem<String>(
-                  value: '',
-                  child: Text('不关联车辆'),
-                ),
+                const DropdownMenuItem<String>(value: '', child: Text('不关联车辆')),
                 ...widget.state.vehicles.map(
                   (vehicle) => DropdownMenuItem<String>(
                     value: vehicle.id,

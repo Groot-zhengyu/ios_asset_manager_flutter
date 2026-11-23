@@ -11,7 +11,7 @@
 
 一套 Flutter 代码同时产出 Android / iOS 的离线资产管理 App。功能口径对齐原 SwiftUI 版，但**代码完全独立、数据不互通**。
 
-当前状态：**功能完整**（42 个自动化测试全绿），Android debug APK 构建成功并已在 API 35 模拟器完成端到端实测（OCR、真实行情、导出导入、App 锁、持久化均已跑通）。iOS 因开发环境是 Windows，尚未构建验证。
+当前状态：**功能完整**（51 个自动化测试全绿，含分辨率自适应专项），Android debug APK 构建成功并已在 API 35 模拟器完成端到端实测（OCR、真实行情、导出导入、App 锁、持久化均已跑通）。iOS 因开发环境是 Windows，尚未构建验证。
 
 ---
 
@@ -167,6 +167,22 @@ lib/
 - **图表全手绘**：环形图、柱状图、占比条都是 `CustomPainter`，零图表库依赖，减少版本兼容风险。
 - **日期格式**：自写 `AppDateFormat`，不依赖 intl。
 - **material_ui**：Flutter 3.47+ 已弃用 `package:flutter/material.dart`，全项目统一 `package:material_ui/material_ui.dart`。**新写代码别用错。**
+- **分辨率自适应**：统一走 `lib/core/responsive.dart`（断点分档 + 内容宽度/间距/图表尺寸/字体缩放钳制）。Flutter 以逻辑像素布局，2K 高分屏（如一加 9 Pro，1440×3216 物理、dpr≈3.5、逻辑约 411dp）由引擎按 dpr 自动换算，界面不会因物理分辨率高而缩小；真正要处理的是逻辑宽度差异与系统字体缩放。详见下方「五·附」。
+
+### 五·附：分辨率自适应（一加 9 Pro 2K 屏适配）
+
+**需求**：App 需在 2K 高分屏（一加 9 Pro）及不同尺寸安卓机上自适应显示，不被系统字体/显示缩放撑破布局。
+
+**实现**（改动文件）：
+- 新增 `lib/core/responsive.dart`：`ScreenClass` 三档（compact <600dp / medium 600~1100dp / expanded ≥1100dp），集中提供 `contentMaxWidthOf`（手机撑满、平板 720、宽屏 960）、`gutterOf`、`cardPaddingOf`、`donutSizeOf`（160~200 小幅自适应）、`chartHeightOf`、`clampTextScale`（字体缩放钳制 0.85~1.15）。
+- `app_shell.dart`：`MaterialApp.builder` 包裹 `MediaQuery(clampTextScale)`，全 App 生效；锁屏页固定 `maxWidth: 360` 改为按屏宽收缩并套 `SingleChildScrollView`，小屏（320dp）+ 键盘弹出不溢出。
+- `overview_view.dart`：内容宽度、环形图直径/描边走响应式；`_DonutPainter.strokeWidth` 参数化并纳入 `shouldRepaint`。
+- `expense_report_view.dart`：占比条固定 64/84 宽改 `Flexible + FittedBox`（标签/金额随可用宽度收缩，字体放大自动缩放）；趋势图高度响应式。
+- `expense_list_view.dart` / `record_view.dart` / `settings_view.dart`：固定 `maxWidth: 720` 改为 `Responsive.contentMaxWidthOf(context)`。
+
+**验证**：新增 `test/responsive_test.dart` 9 个用例，覆盖一加 9 Pro（411×919/dpr3.5）、320 小屏、折叠屏、平板分档，内容宽度、环形图尺寸边界、字体缩放钳制。全量 **51 个测试全绿**（原 42 + 新增 9），`flutter analyze` 0 issue。
+
+**注意**：环形图刻意只做 160~200 的小幅自适应（宽屏档固定 180）——它位于可滚动区，尺寸剧变会把下方分类列表挤出点击视口（曾导致 `overview_view_test` 点击失败，已据此收敛）。后续若调整此处尺寸，务必重跑该测试。
 
 ---
 

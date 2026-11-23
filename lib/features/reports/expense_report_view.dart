@@ -2,6 +2,7 @@ import 'package:material_ui/material_ui.dart';
 
 import '../../core/app_state.dart';
 import '../../core/decimal.dart';
+import '../../core/responsive.dart';
 import '../../models/enums.dart';
 import '../../models/expense.dart';
 
@@ -13,10 +14,10 @@ class ExpenseReportView extends StatelessWidget {
   final AppState state;
 
   static Color _colorForType(ExpenseType type) => switch (type) {
-        ExpenseType.fuel => const Color(0xFFE65100),
-        ExpenseType.etc => const Color(0xFF1565C0),
-        ExpenseType.other => const Color(0xFF757575),
-      };
+    ExpenseType.fuel => const Color(0xFFE65100),
+    ExpenseType.etc => const Color(0xFF1565C0),
+    ExpenseType.other => const Color(0xFF757575),
+  };
 
   static List<MapEntry<String, Dec>> _groupByMonth(List<Expense> expenses) {
     final totals = <String, Dec>{};
@@ -68,7 +69,9 @@ class ExpenseReportView extends StatelessWidget {
           builder: (context, constraints) {
             return Center(
               child: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 720),
+                constraints: BoxConstraints(
+                  maxWidth: Responsive.contentMaxWidthOf(context),
+                ),
                 child: ListView(
                   key: const ValueKey('report-list'),
                   padding: const EdgeInsets.all(16),
@@ -116,7 +119,7 @@ class ExpenseReportView extends StatelessWidget {
                                   fraction: totalMicros <= 0
                                       ? 0
                                       : (typeTotals[type]?.micros ?? 0) /
-                                          totalMicros,
+                                            totalMicros,
                                   color: _colorForType(type),
                                 ),
                               )
@@ -166,9 +169,8 @@ class _OverviewCard extends StatelessWidget {
                 Text(
                   total.currencyString,
                   key: const ValueKey('report-total'),
-                  style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                        fontWeight: FontWeight.bold,
-                      ),
+                  style: Theme.of(context).textTheme.headlineSmall
+                      ?.copyWith(fontWeight: FontWeight.bold),
                 ),
               ],
             ),
@@ -251,8 +253,18 @@ class _TypeBarRow extends StatelessWidget {
       padding: const EdgeInsets.symmetric(vertical: 6),
       child: Row(
         children: <Widget>[
-          SizedBox(width: 64, child: Text(label)),
+          // 用 Flexible + FittedBox：标签随可用宽度收缩，系统字体放大时自动缩放而非溢出。
+          Flexible(
+            flex: 2,
+            child: FittedBox(
+              fit: BoxFit.scaleDown,
+              alignment: Alignment.centerLeft,
+              child: Text(label),
+            ),
+          ),
+          const SizedBox(width: 10),
           Expanded(
+            flex: 5,
             child: SizedBox(
               height: 16,
               child: CustomPaint(
@@ -260,21 +272,26 @@ class _TypeBarRow extends StatelessWidget {
                 painter: _FractionBarPainter(fraction: fraction, color: color),
                 child: Container(
                   decoration: BoxDecoration(
-                    color:
-                        Theme.of(context).colorScheme.surfaceContainerHighest,
+                    color: Theme.of(context)
+                        .colorScheme
+                        .surfaceContainerHighest,
                     borderRadius: BorderRadius.circular(6),
                   ),
                 ),
               ),
             ),
           ),
-          const SizedBox(width: 12),
-          SizedBox(
-            width: 84,
-            child: Text(
-              amount.currencyString,
-              textAlign: TextAlign.right,
-              style: Theme.of(context).textTheme.bodySmall,
+          const SizedBox(width: 10),
+          Flexible(
+            flex: 3,
+            child: FittedBox(
+              fit: BoxFit.scaleDown,
+              alignment: Alignment.centerRight,
+              child: Text(
+                amount.currencyString,
+                textAlign: TextAlign.right,
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
             ),
           ),
         ],
@@ -331,7 +348,7 @@ class _TrendChart extends StatelessWidget {
       children: <Widget>[
         SizedBox(
           key: const ValueKey('report-trend-chart'),
-          height: 160,
+          height: Responsive.chartHeightOf(context),
           child: CustomPaint(
             painter: _TrendPainter(months: months, maxMicros: maxMicros),
             // 无 child 时 CustomPaint 宽度为 0，必须撑满父级约束才能画出柱状图。

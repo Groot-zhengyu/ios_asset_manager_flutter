@@ -6,6 +6,7 @@ import 'package:path_provider/path_provider.dart';
 import 'core/app_icons.dart';
 import 'core/app_settings.dart';
 import 'core/app_state.dart';
+import 'core/responsive.dart';
 import 'core/theme.dart';
 import 'features/expense/expense_list_view.dart';
 import 'features/overview/overview_view.dart';
@@ -22,8 +23,8 @@ Future<void> bootstrapApp() async {
   final directory = await getApplicationDocumentsDirectory();
   final repository = JsonAppRepository(File('${directory.path}/assets.json'))
     ..load();
-  final settings =
-      JsonAppSettingsStore(File('${directory.path}/settings.json'))..load();
+  final settings = JsonAppSettingsStore(File('${directory.path}/settings.json'))
+    ..load();
   runApp(AssetApp(state: AppState(repository, settings: settings)));
 }
 
@@ -118,6 +119,15 @@ class _AssetAppState extends State<AssetApp> with WidgetsBindingObserver {
           title: '资产管家',
           debugShowCheckedModeBanner: false,
           theme: AppTheme.light(),
+          // 全 App 钳制系统字体缩放：尊重用户偏好但防止超大字体撑爆固定布局，
+          // 保证在 2K 高分屏及各类安卓机上文字与控件比例稳定。
+          builder: (context, child) {
+            final media = MediaQuery.of(context);
+            return MediaQuery(
+              data: Responsive.clampTextScale(media),
+              child: child ?? const SizedBox.shrink(),
+            );
+          },
           home: _locked ? _buildLockScreen() : _buildShell(),
         );
       },
@@ -129,56 +139,71 @@ class _AssetAppState extends State<AssetApp> with WidgetsBindingObserver {
       body: SafeArea(
         child: Center(
           child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 360),
-            child: Card(
-              child: Padding(
-                padding: const EdgeInsets.all(24),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const Icon(AppIcons.lock, size: 48),
-                    const SizedBox(height: 16),
-                    Text('已锁定', style: Theme.of(context).textTheme.headlineSmall),
-                    const SizedBox(height: 8),
-                    Text(
-                      widget.state.biometricEnabled
-                          ? '可用指纹 / 面容解锁，或输入 PIN'
-                          : '请输入应用 PIN 以继续',
-                      textAlign: TextAlign.center,
-                    ),
-                    if (widget.state.biometricEnabled) ...[
-                      const SizedBox(height: 20),
-                      FilledButton.icon(
-                        key: const ValueKey('biometric-unlock-button'),
-                        onPressed: _biometricBusy ? null : _tryBiometric,
-                        icon: const Icon(Icons.fingerprint),
-                        label: Text(_biometricBusy ? '验证中…' : '指纹 / 面容解锁'),
+            // 小屏(如 320dp)下按屏宽扣掉左右间距收缩，避免固定 360 撑破屏幕。
+            constraints: BoxConstraints(
+              maxWidth:
+                  (MediaQuery.sizeOf(context).width -
+                          2 * Responsive.gutterOf(context))
+                      .clamp(240.0, 360.0),
+            ),
+            child: SingleChildScrollView(
+              child: Card(
+                child: Padding(
+                  padding: const EdgeInsets.all(24),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(AppIcons.lock, size: 48),
+                      const SizedBox(height: 16),
+                      Text(
+                        '已锁定',
+                        style: Theme.of(context).textTheme.headlineSmall,
                       ),
-                      const SizedBox(height: 12),
-                      Text('或', style: Theme.of(context).textTheme.bodySmall),
-                    ],
-                    const SizedBox(height: 12),
-                    TextField(
-                      key: const ValueKey('pin-input'),
-                      controller: _pinController,
-                      obscureText: true,
-                      keyboardType: TextInputType.number,
-                      decoration: const InputDecoration(labelText: 'PIN'),
-                      onSubmitted: (_) => _unlock(),
-                    ),
-                    if (_pinError != null) ...[
                       const SizedBox(height: 8),
-                      Text(_pinError!,
-                          style: TextStyle(color: Theme.of(context).colorScheme.error)),
+                      Text(
+                        widget.state.biometricEnabled
+                            ? '可用指纹 / 面容解锁，或输入 PIN'
+                            : '请输入应用 PIN 以继续',
+                        textAlign: TextAlign.center,
+                      ),
+                      if (widget.state.biometricEnabled) ...[
+                        const SizedBox(height: 20),
+                        FilledButton.icon(
+                          key: const ValueKey('biometric-unlock-button'),
+                          onPressed: _biometricBusy ? null : _tryBiometric,
+                          icon: const Icon(Icons.fingerprint),
+                          label: Text(_biometricBusy ? '验证中…' : '指纹 / 面容解锁'),
+                        ),
+                        const SizedBox(height: 12),
+                        Text('或', style: Theme.of(context).textTheme.bodySmall),
+                      ],
+                      const SizedBox(height: 12),
+                      TextField(
+                        key: const ValueKey('pin-input'),
+                        controller: _pinController,
+                        obscureText: true,
+                        keyboardType: TextInputType.number,
+                        decoration: const InputDecoration(labelText: 'PIN'),
+                        onSubmitted: (_) => _unlock(),
+                      ),
+                      if (_pinError != null) ...[
+                        const SizedBox(height: 8),
+                        Text(
+                          _pinError!,
+                          style: TextStyle(
+                            color: Theme.of(context).colorScheme.error,
+                          ),
+                        ),
+                      ],
+                      const SizedBox(height: 16),
+                      FilledButton.icon(
+                        key: const ValueKey('unlock-button'),
+                        onPressed: _unlock,
+                        icon: const Icon(Icons.lock_open),
+                        label: const Text('解锁'),
+                      ),
                     ],
-                    const SizedBox(height: 16),
-                    FilledButton.icon(
-                      key: const ValueKey('unlock-button'),
-                      onPressed: _unlock,
-                      icon: const Icon(Icons.lock_open),
-                      label: const Text('解锁'),
-                    ),
-                  ],
+                  ),
                 ),
               ),
             ),
@@ -257,11 +282,20 @@ class _RecordTabState extends State<_RecordTab> {
             padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
             child: SegmentedButton<int>(
               segments: const [
-                ButtonSegment(value: 0, label: Text('记账 / 票据'), icon: Icon(Icons.document_scanner)),
-                ButtonSegment(value: 1, label: Text('费用明细'), icon: Icon(Icons.receipt_long)),
+                ButtonSegment(
+                  value: 0,
+                  label: Text('记账 / 票据'),
+                  icon: Icon(Icons.document_scanner),
+                ),
+                ButtonSegment(
+                  value: 1,
+                  label: Text('费用明细'),
+                  icon: Icon(Icons.receipt_long),
+                ),
               ],
               selected: <int>{_section},
-              onSelectionChanged: (value) => setState(() => _section = value.first),
+              onSelectionChanged: (value) =>
+                  setState(() => _section = value.first),
             ),
           ),
           Expanded(

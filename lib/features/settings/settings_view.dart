@@ -6,6 +6,7 @@ import 'package:material_ui/material_ui.dart';
 
 import '../../core/app_icons.dart';
 import '../../core/app_state.dart';
+import '../../core/responsive.dart';
 import '../../models/cash_account.dart';
 import '../../models/forms.dart';
 import '../../services/biometric_service.dart';
@@ -132,9 +133,8 @@ class _SettingsViewState extends State<SettingsView> {
     final passed = await _biometric.authenticate(reason: '验证身份以访问资产数据');
     if (!mounted) return;
     setState(() => _biometricBusy = false);
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(passed ? '验证通过' : '验证未通过')),
-    );
+    ScaffoldMessenger.of(context)
+        .showSnackBar(SnackBar(content: Text(passed ? '验证通过' : '验证未通过')));
   }
 
   // MARK: - 行情
@@ -161,8 +161,12 @@ class _SettingsViewState extends State<SettingsView> {
         ),
       );
       if (result.hasFailures) {
-        setState(() => _refreshError =
-            result.failures.take(3).map((f) => f.toString()).join('\n'));
+        setState(
+          () => _refreshError = result.failures
+              .take(3)
+              .map((f) => f.toString())
+              .join('\n'),
+        );
       }
     } catch (error) {
       if (!mounted) return;
@@ -192,9 +196,8 @@ class _SettingsViewState extends State<SettingsView> {
     }
     setState(() => _refreshError = null);
     final updated = widget.state.refreshPrices(prices);
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('已更新 $updated 条')),
-    );
+    ScaffoldMessenger.of(context)
+        .showSnackBar(SnackBar(content: Text('已更新 $updated 条')));
   }
 
   // MARK: - 导出
@@ -240,8 +243,10 @@ class _SettingsViewState extends State<SettingsView> {
           children: <Widget>[
             Padding(
               padding: const EdgeInsets.fromLTRB(20, 4, 20, 8),
-              child: Text('导出数据',
-                  style: Theme.of(context).textTheme.titleMedium),
+              child: Text(
+                '导出数据',
+                style: Theme.of(context).textTheme.titleMedium,
+              ),
             ),
             ListTile(
               key: const ValueKey('export-share-csv'),
@@ -277,9 +282,8 @@ class _SettingsViewState extends State<SettingsView> {
                 );
                 Clipboard.setData(ClipboardData(text: bundle.csv));
                 Navigator.pop(sheetContext);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('已复制到剪贴板')),
-                );
+                ScaffoldMessenger.of(context)
+                    .showSnackBar(const SnackBar(content: Text('已复制到剪贴板')));
               },
             ),
             const SizedBox(height: 8),
@@ -311,9 +315,11 @@ class _SettingsViewState extends State<SettingsView> {
         context: context,
         builder: (dialogContext) => AlertDialog(
           title: const Text('导入完成'),
-          content: Text(outcome.total == 0
-              ? '没有导入任何数据${outcome.skipped > 0 ? '（${outcome.skipped} 条已存在或格式不支持）' : ''}'
-              : outcome.summary),
+          content: Text(
+            outcome.total == 0
+                ? '没有导入任何数据${outcome.skipped > 0 ? '（${outcome.skipped} 条已存在或格式不支持）' : ''}'
+                : outcome.summary,
+          ),
           actions: <Widget>[
             FilledButton(
               onPressed: () => Navigator.pop(dialogContext),
@@ -601,7 +607,9 @@ class _SettingsViewState extends State<SettingsView> {
             builder: (context, constraints) {
               return Center(
                 child: ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 720),
+                  constraints: BoxConstraints(
+                    maxWidth: Responsive.contentMaxWidthOf(context),
+                  ),
                   child: ListView(
                     children: <Widget>[
                       _lockCard(),
