@@ -1,5 +1,5 @@
 name: ios_asset_manager_flutter
-description: 资产管理应用的 Flutter 双端并行实现，当前先验证数字解析与股票保存反馈闭环。
+description: 资产管家 - Flutter 双端（Android / iOS）离线资产管理应用。
 publish_to: "none"
 version: 1.0.0+1
 
