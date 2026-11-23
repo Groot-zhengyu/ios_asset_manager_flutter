@@ -1,5 +1,8 @@
 import 'package:material_ui/material_ui.dart';
 
+import '../core/app_motion.dart';
+import '../core/theme.dart';
+
 /// 通用表单组件，减少各模块重复代码并统一交互反馈。
 class MoneyField extends StatelessWidget {
   const MoneyField({
@@ -24,7 +27,7 @@ class MoneyField extends StatelessWidget {
       decoration: InputDecoration(
         labelText: label,
         hintText: hint,
-        prefixIcon: Icon(icon),
+        prefixIcon: Icon(icon, color: AppColors.primary),
       ),
     );
   }
@@ -38,24 +41,35 @@ class ErrorBanner extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return AnimatedSwitcher(
-      duration: const Duration(milliseconds: 220),
+      duration: AppMotion.durationOf(context, AppMotion.feedback),
       child: Padding(
         key: const ValueKey('form-error'),
-        padding: const EdgeInsets.only(top: 8),
-        child: Row(
-          children: [
-            Icon(Icons.error_outline, size: 16, color: Theme.of(context).colorScheme.error),
-            const SizedBox(width: 6),
-            Expanded(
-              child: Text(
-                message,
-                style: TextStyle(
-                  color: Theme.of(context).colorScheme.error,
-                  fontSize: 13,
+        padding: const EdgeInsets.only(top: 10),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          decoration: BoxDecoration(
+            color: AppColors.profit.withValues(alpha: 0.08),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: AppColors.profit.withValues(alpha: 0.22),
+            ),
+          ),
+          child: Row(
+            children: <Widget>[
+              const Icon(Icons.error_outline,
+                  size: 17, color: AppColors.profit),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  message,
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: AppColors.profit,
+                        fontWeight: FontWeight.w600,
+                      ),
                 ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );

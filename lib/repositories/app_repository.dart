@@ -5,7 +5,9 @@ import '../core/decimal.dart';
 import '../models/cash_account.dart';
 import '../models/enums.dart';
 import '../models/expense.dart';
+import '../models/fund_plan.dart';
 import '../models/ocr_draft.dart';
+import '../models/recurring_rule.dart';
 import '../models/security.dart';
 import '../models/vehicle.dart';
 
@@ -31,6 +33,14 @@ abstract class AppRepository {
   void saveDraft(OCRDraft item);
   void deleteDraft(String id);
 
+  List<RecurringRule> fetchRules();
+  void saveRule(RecurringRule item);
+  void deleteRule(String id);
+
+  List<FundPlan> fetchPlans();
+  void savePlan(FundPlan item);
+  void deletePlan(String id);
+
   void persist();
 }
 
@@ -41,6 +51,8 @@ class InMemoryAppRepository implements AppRepository {
   final List<CashAccount> _cashAccounts = [];
   final List<Expense> _expenses = [];
   final List<OCRDraft> _drafts = [];
+  final List<RecurringRule> _rules = [];
+  final List<FundPlan> _plans = [];
 
   bool shouldThrowOnSave = false;
 
@@ -55,6 +67,7 @@ class InMemoryAppRepository implements AppRepository {
     _check();
     _upsert(_securities, item.id, item);
   }
+
   @override
   void deleteSecurity(String id) => _securities.removeWhere((e) => e.id == id);
 
@@ -65,6 +78,7 @@ class InMemoryAppRepository implements AppRepository {
     _check();
     _upsert(_vehicles, item.id, item);
   }
+
   @override
   void deleteVehicle(String id) {
     _vehicles.removeWhere((e) => e.id == id);
@@ -78,6 +92,7 @@ class InMemoryAppRepository implements AppRepository {
     _check();
     _upsert(_cashAccounts, item.id, item);
   }
+
   @override
   void deleteCashAccount(String id) =>
       _cashAccounts.removeWhere((e) => e.id == id);
@@ -89,6 +104,7 @@ class InMemoryAppRepository implements AppRepository {
     _check();
     _upsert(_expenses, item.id, item);
   }
+
   @override
   void deleteExpense(String id) => _expenses.removeWhere((e) => e.id == id);
 
@@ -99,8 +115,31 @@ class InMemoryAppRepository implements AppRepository {
     _check();
     _upsert(_drafts, item.id, item);
   }
+
   @override
   void deleteDraft(String id) => _drafts.removeWhere((e) => e.id == id);
+
+  @override
+  List<RecurringRule> fetchRules() => List.unmodifiable(_rules);
+  @override
+  void saveRule(RecurringRule item) {
+    _check();
+    _upsert(_rules, item.id, item);
+  }
+
+  @override
+  void deleteRule(String id) => _rules.removeWhere((e) => e.id == id);
+
+  @override
+  List<FundPlan> fetchPlans() => List.unmodifiable(_plans);
+  @override
+  void savePlan(FundPlan item) {
+    _check();
+    _upsert(_plans, item.id, item);
+  }
+
+  @override
+  void deletePlan(String id) => _plans.removeWhere((e) => e.id == id);
 
   @override
   void persist() {}
@@ -125,6 +164,8 @@ class JsonAppRepository implements AppRepository {
   List<CashAccount> _cashAccounts = [];
   List<Expense> _expenses = [];
   List<OCRDraft> _drafts = [];
+  List<RecurringRule> _rules = [];
+  List<FundPlan> _plans = [];
 
   bool shouldThrowOnSave = false;
 
@@ -147,6 +188,12 @@ class JsonAppRepository implements AppRepository {
       _drafts = (data['drafts'] as List? ?? [])
           .map((e) => _draftFromJson(e as Map<String, dynamic>))
           .toList();
+      _rules = (data['recurringRules'] as List? ?? [])
+          .map((e) => _ruleFromJson(e as Map<String, dynamic>))
+          .toList();
+      _plans = (data['fundPlans'] as List? ?? [])
+          .map((e) => _planFromJson(e as Map<String, dynamic>))
+          .toList();
     } catch (_) {
       // 文件损坏时从空数据启动，避免应用崩溃。
     }
@@ -161,6 +208,8 @@ class JsonAppRepository implements AppRepository {
       'cashAccounts': _cashAccounts.map(_cashToJson).toList(),
       'expenses': _expenses.map(_expenseToJson).toList(),
       'drafts': _drafts.map(_draftToJson).toList(),
+      'recurringRules': _rules.map(_ruleToJson).toList(),
+      'fundPlans': _plans.map(_planToJson).toList(),
     };
     file.writeAsStringSync(jsonEncode(data));
   }
@@ -177,6 +226,7 @@ class JsonAppRepository implements AppRepository {
     InMemoryAppRepository._upsert(_securities, item.id, item);
     persist();
   }
+
   @override
   void deleteSecurity(String id) {
     _securities.removeWhere((e) => e.id == id);
@@ -191,6 +241,7 @@ class JsonAppRepository implements AppRepository {
     InMemoryAppRepository._upsert(_vehicles, item.id, item);
     persist();
   }
+
   @override
   void deleteVehicle(String id) {
     _vehicles.removeWhere((e) => e.id == id);
@@ -206,6 +257,7 @@ class JsonAppRepository implements AppRepository {
     InMemoryAppRepository._upsert(_cashAccounts, item.id, item);
     persist();
   }
+
   @override
   void deleteCashAccount(String id) {
     _cashAccounts.removeWhere((e) => e.id == id);
@@ -220,6 +272,7 @@ class JsonAppRepository implements AppRepository {
     InMemoryAppRepository._upsert(_expenses, item.id, item);
     persist();
   }
+
   @override
   void deleteExpense(String id) {
     _expenses.removeWhere((e) => e.id == id);
@@ -234,9 +287,40 @@ class JsonAppRepository implements AppRepository {
     InMemoryAppRepository._upsert(_drafts, item.id, item);
     persist();
   }
+
   @override
   void deleteDraft(String id) {
     _drafts.removeWhere((e) => e.id == id);
+    persist();
+  }
+
+  @override
+  List<RecurringRule> fetchRules() => List.unmodifiable(_rules);
+  @override
+  void saveRule(RecurringRule item) {
+    _check();
+    InMemoryAppRepository._upsert(_rules, item.id, item);
+    persist();
+  }
+
+  @override
+  void deleteRule(String id) {
+    _rules.removeWhere((e) => e.id == id);
+    persist();
+  }
+
+  @override
+  List<FundPlan> fetchPlans() => List.unmodifiable(_plans);
+  @override
+  void savePlan(FundPlan item) {
+    _check();
+    InMemoryAppRepository._upsert(_plans, item.id, item);
+    persist();
+  }
+
+  @override
+  void deletePlan(String id) {
+    _plans.removeWhere((e) => e.id == id);
     persist();
   }
 
@@ -305,18 +389,20 @@ class JsonAppRepository implements AppRepository {
         'source': e.source.rawValue,
         'relatedAssetId': e.relatedAssetId,
         'vehicleId': e.vehicleId,
+        'sourceId': e.sourceId,
         'createdAt': e.createdAt.toIso8601String(),
       };
 
   Expense _expenseFromJson(Map<String, dynamic> j) => Expense(
         id: j['id'] as String,
-        type: _expenseType(j['type'] as String),
+        type: ExpenseTypeX.fromRaw(j['type'] as String),
         amount: Dec.fromJson(j['amount'] as String),
         occurredAt: DateTime.parse(j['occurredAt'] as String),
         note: j['note'] as String? ?? '',
-        source: j['source'] == 'ocr' ? ExpenseSource.ocr : ExpenseSource.manual,
+        source: ExpenseSourceX.fromRaw(j['source'] as String?),
         relatedAssetId: j['relatedAssetId'] as String?,
         vehicleId: j['vehicleId'] as String?,
+        sourceId: j['sourceId'] as String?,
         createdAt: DateTime.parse(j['createdAt'] as String),
       );
 
@@ -339,8 +425,9 @@ class JsonAppRepository implements AppRepository {
         originalImageBytes: j['image'] == null
             ? null
             : base64Decode(j['image'] as String),
-        recognizedType:
-            j['type'] == null ? null : _expenseType(j['type'] as String),
+        recognizedType: j['type'] == null
+            ? null
+            : ExpenseTypeX.fromRaw(j['type'] as String),
         recognizedAmount: j['amount'] == null
             ? null
             : Dec.fromJson(j['amount'] as String),
@@ -352,9 +439,89 @@ class JsonAppRepository implements AppRepository {
         createdAt: DateTime.parse(j['createdAt'] as String),
       );
 
-  static ExpenseType _expenseType(String raw) => switch (raw) {
-        'fuel' => ExpenseType.fuel,
-        'etc' => ExpenseType.etc,
-        _ => ExpenseType.other,
+  Map<String, dynamic> _ruleToJson(RecurringRule e) => {
+        'id': e.id,
+        'title': e.title,
+        'type': e.type.rawValue,
+        'amount': e.amount.toJson(),
+        'dayOfMonth': e.dayOfMonth,
+        'note': e.note,
+        'vehicleId': e.vehicleId,
+        'enabled': e.enabled,
+        'lastAppliedMonth': e.lastAppliedMonth,
+        'createdAt': e.createdAt.toIso8601String(),
       };
+
+  RecurringRule _ruleFromJson(Map<String, dynamic> j) => RecurringRule(
+        id: j['id'] as String,
+        title: j['title'] as String? ?? '周期记账',
+        type: ExpenseTypeX.fromRaw(j['type'] as String?),
+        amount: Dec.fromJson(j['amount'] as String? ?? '0'),
+        dayOfMonth: _intClamped(j['dayOfMonth'], 1, 31),
+        note: j['note'] as String? ?? '',
+        vehicleId: j['vehicleId'] as String?,
+        enabled: j['enabled'] as bool? ?? true,
+        lastAppliedMonth: j['lastAppliedMonth'] as String?,
+        createdAt: DateTime.tryParse(j['createdAt'] as String? ?? '') ??
+            DateTime.now(),
+      );
+
+  Map<String, dynamic> _planToJson(FundPlan e) => {
+        'id': e.id,
+        'fundCode': e.fundCode,
+        'fundName': e.fundName,
+        'amount': e.amount.toJson(),
+        'frequency': e.frequency.rawValue,
+        'dayOfMonth': e.dayOfMonth,
+        'weekday': e.weekday,
+        'enabled': e.enabled,
+        'nextRunDate': e.nextRunDate.toIso8601String(),
+        'lastRunDate': e.lastRunDate?.toIso8601String(),
+        'history': e.history
+            .map(
+              (run) => <String, dynamic>{
+                'id': run.id,
+                'planId': run.planId,
+                'date': run.date.toIso8601String(),
+                'amount': run.amount.toJson(),
+                'note': run.note,
+              },
+            )
+            .toList(),
+        'createdAt': e.createdAt.toIso8601String(),
+      };
+
+  FundPlan _planFromJson(Map<String, dynamic> j) => FundPlan(
+        id: j['id'] as String,
+        fundCode: j['fundCode'] as String? ?? '',
+        fundName: j['fundName'] as String? ?? '',
+        amount: Dec.fromJson(j['amount'] as String? ?? '0'),
+        frequency: FundPlanFrequencyX.fromRaw(j['frequency'] as String?),
+        dayOfMonth: _intClamped(j['dayOfMonth'], 1, 31),
+        weekday: _intClamped(j['weekday'], 1, 7),
+        enabled: j['enabled'] as bool? ?? true,
+        nextRunDate: DateTime.tryParse(j['nextRunDate'] as String? ?? '') ??
+            DateTime.now(),
+        lastRunDate: j['lastRunDate'] == null
+            ? null
+            : DateTime.tryParse(j['lastRunDate'] as String),
+        history: (j['history'] as List? ?? [])
+            .map(
+              (run) => FundPlanRun(
+                id: run['id'] as String,
+                planId: run['planId'] as String,
+                date: DateTime.parse(run['date'] as String),
+                amount: Dec.fromJson(run['amount'] as String),
+                note: run['note'] as String? ?? '',
+              ),
+            )
+            .toList(),
+        createdAt: DateTime.tryParse(j['createdAt'] as String? ?? '') ??
+            DateTime.now(),
+      );
+
+  static int _intClamped(Object? value, int min, int max) {
+    final parsed = (value as num?)?.toInt() ?? min;
+    return parsed.clamp(min, max).toInt();
+  }
 }

@@ -1,4 +1,5 @@
 import 'enums.dart';
+import 'fund_plan.dart';
 import 'security.dart';
 
 /// 表单统一用字符串承接输入，落库前由 AppState 解析校验。
@@ -23,6 +24,27 @@ class ExpenseFormData {
   String note = '';
   ExpenseSource source = ExpenseSource.manual;
   String? vehicleId;
+  String? sourceId;
+}
+
+class RecurringRuleFormData {
+  String title = '';
+  ExpenseType type = ExpenseType.fuel;
+  String amountText = '';
+  int dayOfMonth = 1;
+  String note = '';
+  String? vehicleId;
+  bool enabled = true;
+}
+
+class FundPlanFormData {
+  String fundCode = '';
+  String fundName = '';
+  String amountText = '';
+  FundPlanFrequency frequency = FundPlanFrequency.monthly;
+  int dayOfMonth = 1;
+  int weekday = 1;
+  bool enabled = true;
 }
 
 class SecurityPriceFormData {

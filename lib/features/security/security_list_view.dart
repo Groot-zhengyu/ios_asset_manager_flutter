@@ -1,14 +1,20 @@
 import 'package:material_ui/material_ui.dart';
 
 import '../../core/app_icons.dart';
+import '../../core/app_motion.dart';
 import '../../core/app_state.dart';
 import '../../core/decimal.dart';
+import '../../core/responsive.dart';
 import '../../core/theme.dart';
 import '../../models/security.dart';
 import '../../services/asset_calculator.dart';
+import '../../widgets/app_surfaces.dart';
 import '../../widgets/form_fields.dart';
+import 'fund_plan_view.dart';
+import 'fund_screenshot_sheet.dart';
 
-/// 证券列表页：顶部汇总、网络行情刷新（手动输入兜底）、持仓列表与新增入口。
+/// 证券列表页：总市值/总盈亏汇总、行情刷新、持仓列表与新增入口。
+/// 数据读写完全沿用 AppState，仅替换视觉层级与动效。
 class SecurityListView extends StatefulWidget {
   const SecurityListView({super.key, required this.state});
 
@@ -20,6 +26,7 @@ class SecurityListView extends StatefulWidget {
 
 class _SecurityListViewState extends State<SecurityListView> {
   bool _refreshing = false;
+  int _segment = 0;
 
   AppState get state => widget.state;
 
@@ -45,10 +52,11 @@ class _SecurityListViewState extends State<SecurityListView> {
 
   @override
   Widget build(BuildContext context) {
+    final gutter = Responsive.gutterOf(context);
     return Scaffold(
       appBar: AppBar(
         title: const Text('证券'),
-        actions: [
+        actions: <Widget>[
           IconButton(
             key: const ValueKey('refresh-button'),
             tooltip: '从网络刷新行情',
@@ -72,26 +80,42 @@ class _SecurityListViewState extends State<SecurityListView> {
       body: SafeArea(
         child: LayoutBuilder(
           builder: (context, constraints) {
-            final width = constraints.maxWidth > 720 ? 720.0 : constraints.maxWidth;
             return Center(
-              child: SizedBox(
-                width: width,
+              child: ConstrainedBox(
+                constraints: BoxConstraints(
+                  maxWidth: Responsive.contentMaxWidthOf(context),
+                ),
                 child: Column(
-                  children: [
-                    _buildSummary(context),
+                  children: <Widget>[
                     Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                      child: SizedBox(
-                        width: double.infinity,
-                        child: FilledButton.icon(
-                          key: const ValueKey('add-security-button'),
-                          onPressed: () => _openEditSheet(context),
-                          icon: const Icon(Icons.add),
-                          label: const Text('新增证券'),
-                        ),
+                      padding: EdgeInsets.fromLTRB(gutter, 10, gutter, 4),
+                      child: SegmentedButton<int>(
+                        key: const ValueKey('security-segment'),
+                        segments: const <ButtonSegment<int>>[
+                          ButtonSegment<int>(
+                            value: 0,
+                            label: Text('持仓'),
+                            icon: Icon(Icons.show_chart),
+                          ),
+                          ButtonSegment<int>(
+                            value: 1,
+                            label: Text('定投计划'),
+                            icon: Icon(Icons.repeat_on),
+                          ),
+                        ],
+                        selected: <int>{_segment},
+                        onSelectionChanged: (values) {
+                          if (values.isNotEmpty) {
+                            setState(() => _segment = values.first);
+                          }
+                        },
                       ),
                     ),
-                    Expanded(child: _buildList(context)),
+                    Expanded(
+                      child: _segment == 0
+                          ? _buildHoldings(context)
+                          : FundPlanListView(state: state),
+                    ),
                   ],
                 ),
               ),
@@ -102,6 +126,54 @@ class _SecurityListViewState extends State<SecurityListView> {
     );
   }
 
+  Widget _buildHoldings(BuildContext context) {
+    final gutter = Responsive.gutterOf(context);
+    return Column(
+      children: <Widget>[
+        _buildSummary(context),
+        Padding(
+          padding: EdgeInsets.fromLTRB(gutter, 10, gutter, 4),
+          child: Row(
+            children: <Widget>[
+              Expanded(
+                child: PressFeedback(
+                  child: OutlinedButton.icon(
+                    key: const ValueKey('fund-screenshot-button'),
+                    onPressed: _openScreenshotImport,
+                    icon: Icon(AppIcons.ocr),
+                    label: const Text('截图识别基金'),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: PressFeedback(
+                  child: FilledButton.icon(
+                    key: const ValueKey('add-security-button'),
+                    onPressed: () => _openEditSheet(context),
+                    icon: const Icon(Icons.add),
+                    label: const Text('新增证券'),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+        Expanded(child: _buildList(context)),
+      ],
+    );
+  }
+
+  Future<void> _openScreenshotImport() async {
+    await showModalBottomSheet<bool>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (_) => FundScreenshotImportSheet(state: state),
+    );
+    if (mounted) setState(() {});
+  }
+
   Widget _buildSummary(BuildContext context) {
     final totalValue = state.securities.fold<Dec>(
       Dec.zero,
@@ -109,43 +181,44 @@ class _SecurityListViewState extends State<SecurityListView> {
     );
     final totalProfit = AssetCalculator.totalProfit(state.securities);
     final profitColor = AppTheme.profitColor(totalProfit.compareTo(Dec.zero));
-    final theme = Theme.of(context);
 
-    return Card(
-      margin: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Row(
-          children: [
-            Expanded(
-              child: _summaryItem(
-                context: context,
-                label: '总市值',
-                value: totalValue.currencyString,
-                valueKey: const ValueKey('summary-total-value'),
-                valueStyle: theme.textTheme.titleMedium
-                    ?.copyWith(fontWeight: FontWeight.bold),
-              ),
+    return AppCard(
+      margin: EdgeInsets.fromLTRB(
+        Responsive.gutterOf(context),
+        12,
+        Responsive.gutterOf(context),
+        0,
+      ),
+      tint: AppColors.fund,
+      child: Row(
+        children: <Widget>[
+          Expanded(
+            child: _summaryItem(
+              context: context,
+              label: '总市值',
+              value: totalValue,
+              valueKey: const ValueKey('summary-total-value'),
+              valueColor: AppColors.ink,
+              icon: Icons.account_balance_wallet_outlined,
             ),
-            Container(
-              width: 1,
-              height: 40,
-              color: theme.dividerColor,
+          ),
+          Container(
+            width: 1,
+            height: 44,
+            color: AppColors.outlineSoft,
+          ),
+          Expanded(
+            child: _summaryItem(
+              context: context,
+              label: '总盈亏',
+              value: totalProfit,
+              signed: true,
+              valueKey: const ValueKey('summary-total-profit'),
+              valueColor: profitColor,
+              icon: Icons.trending_up,
             ),
-            Expanded(
-              child: _summaryItem(
-                context: context,
-                label: '总盈亏',
-                value: totalProfit.signedCurrencyString,
-                valueKey: const ValueKey('summary-total-profit'),
-                valueStyle: theme.textTheme.titleMedium?.copyWith(
-                  color: profitColor,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-            ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
@@ -153,21 +226,29 @@ class _SecurityListViewState extends State<SecurityListView> {
   Widget _summaryItem({
     required BuildContext context,
     required String label,
-    required String value,
+    required Dec value,
     required Key valueKey,
-    TextStyle? valueStyle,
+    required Color valueColor,
+    required IconData icon,
+    bool signed = false,
   }) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(label, style: Theme.of(context).textTheme.bodySmall),
-        const SizedBox(height: 4),
-        Text(
-          value,
+      children: <Widget>[
+        Row(
+          children: <Widget>[
+            Icon(icon, size: 14, color: AppColors.inkTertiary),
+            const SizedBox(width: 6),
+            Text(label, style: Theme.of(context).textTheme.bodySmall),
+          ],
+        ),
+        const SizedBox(height: 8),
+        AnimatedCurrencyText(
           key: valueKey,
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-          style: valueStyle ?? Theme.of(context).textTheme.titleMedium,
+          value: value,
+          signed: signed,
+          color: valueColor,
+          style: Theme.of(context).textTheme.headlineSmall,
         ),
       ],
     );
@@ -175,42 +256,78 @@ class _SecurityListViewState extends State<SecurityListView> {
 
   Widget _buildList(BuildContext context) {
     if (state.securities.isEmpty) {
-      return const Center(child: Text('暂无证券持仓，点击上方按钮新增'));
+      return Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: <Widget>[
+            Container(
+              width: 72,
+              height: 72,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: AppColors.fund.withValues(alpha: 0.10),
+              ),
+              child: const Icon(Icons.show_chart,
+                  size: 32, color: AppColors.fund),
+            ),
+            const SizedBox(height: 12),
+            Text('暂无证券持仓，点击上方按钮新增',
+                style: Theme.of(context).textTheme.bodyMedium),
+          ],
+        ),
+      );
     }
     return ListView.builder(
-      padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 20),
       itemCount: state.securities.length,
       itemBuilder: (context, index) {
         final security = state.securities[index];
         final profit = AssetCalculator.profit(security);
         final profitRate = AssetCalculator.profitRate(security);
         final profitColor = AppTheme.profitColor(profit.compareTo(Dec.zero));
-        return Card(
-          child: ListTile(
-            key: ValueKey('security-${security.id}'),
-            leading: Icon(AppIcons.forSecurityType(security.type)),
-            title: Text(security.name),
-            subtitle: Text('代码 ${security.code}'),
-            trailing: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: [
-                Text(
-                  AssetCalculator.marketValue(security).currencyString,
-                  style: const TextStyle(fontWeight: FontWeight.w600),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  profit.signedCurrencyString,
-                  style: TextStyle(color: profitColor, fontSize: 12),
-                ),
-                Text(
-                  profitRate.percentString,
-                  style: TextStyle(color: profitColor, fontSize: 12),
-                ),
-              ],
+        final iconColor = security.type == SecurityType.stock
+            ? AppColors.stock
+            : AppColors.fund;
+        return StaggerEntrance(
+          index: index,
+          child: AppCard(
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+            child: ListTile(
+              key: ValueKey('security-${security.id}'),
+              leading: CircleAvatar(
+                backgroundColor: iconColor.withValues(alpha: 0.13),
+                child: Icon(AppIcons.forSecurityType(security.type),
+                    color: iconColor, size: 20),
+              ),
+              title: Text(security.name),
+              subtitle: Text('代码 ${security.code}'),
+              trailing: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: <Widget>[
+                  FittedBox(
+                    fit: BoxFit.scaleDown,
+                    child: Text(
+                      AssetCalculator.marketValue(security).currencyString,
+                      style: Theme.of(context).textTheme.titleSmall
+                          ?.copyWith(color: AppColors.ink),
+                    ),
+                  ),
+                  const SizedBox(height: 3),
+                  Text(
+                    profit.signedCurrencyString,
+                    style: Theme.of(context).textTheme.bodySmall
+                        ?.copyWith(color: profitColor),
+                  ),
+                  Text(
+                    profitRate.percentString,
+                    style: Theme.of(context).textTheme.bodySmall
+                        ?.copyWith(color: profitColor),
+                  ),
+                ],
+              ),
+              onTap: () => _openEditSheet(context, editing: security),
             ),
-            onTap: () => _openEditSheet(context, editing: security),
           ),
         );
       },
@@ -221,6 +338,7 @@ class _SecurityListViewState extends State<SecurityListView> {
     showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
+      showDragHandle: true,
       builder: (_) => SecurityEditSheet(state: state, editing: editing),
     );
   }
@@ -283,9 +401,9 @@ class _RefreshPricesDialogState extends State<_RefreshPricesDialog> {
       content: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
+        children: <Widget>[
           const Text('每行一条：代码,价格（如 600519,1680.50）'),
-          const SizedBox(height: 8),
+          const SizedBox(height: 10),
           TextField(
             key: const ValueKey('refresh-prices-input'),
             controller: _controller,
@@ -295,14 +413,14 @@ class _RefreshPricesDialogState extends State<_RefreshPricesDialog> {
               hintText: '600519,1680.50\n000001,12.30',
             ),
           ),
-          const SizedBox(height: 8),
-          const Text(
+          const SizedBox(height: 10),
+          Text(
             '现价必须大于 0，非法值将保留上次有效值。',
-            style: TextStyle(fontSize: 12),
+            style: Theme.of(context).textTheme.bodySmall,
           ),
         ],
       ),
-      actions: [
+      actions: <Widget>[
         TextButton(
           onPressed: () => Navigator.of(context).pop(),
           child: const Text('取消'),
@@ -352,7 +470,8 @@ class _SecurityEditSheetState extends State<SecurityEditSheet> {
     _codeController = TextEditingController(text: initial.code);
     _quantityController = TextEditingController(text: initial.quantityText);
     _costPriceController = TextEditingController(text: initial.costPriceText);
-    _currentPriceController = TextEditingController(text: initial.currentPriceText);
+    _currentPriceController =
+        TextEditingController(text: initial.currentPriceText);
   }
 
   @override
@@ -391,7 +510,7 @@ class _SecurityEditSheetState extends State<SecurityEditSheet> {
         key: const ValueKey('delete-security-dialog'),
         title: const Text('删除证券'),
         content: Text('确认删除「${item.name}（${item.code}）」？'),
-        actions: [
+        actions: <Widget>[
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),
             child: const Text('取消'),
@@ -418,97 +537,99 @@ class _SecurityEditSheetState extends State<SecurityEditSheet> {
 
   @override
   Widget build(BuildContext context) {
-    const numberKeyboard =
-        TextInputType.numberWithOptions(decimal: true);
+    const numberKeyboard = TextInputType.numberWithOptions(decimal: true);
     return SafeArea(
       child: SingleChildScrollView(
-        padding: EdgeInsets.only(
-          bottom: MediaQuery.of(context).viewInsets.bottom + 16,
+        padding: EdgeInsets.fromLTRB(
+          20,
+          8,
+          20,
+          MediaQuery.of(context).viewInsets.bottom + 24,
         ),
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Text(
-                widget.editing == null ? '新增证券' : '编辑证券',
-                style: Theme.of(context).textTheme.titleLarge,
-              ),
-              const SizedBox(height: 12),
-              Row(
-                children: [
-                  const Text('类型'),
-                  const SizedBox(width: 12),
-                  DropdownButton<SecurityType>(
-                    key: const ValueKey('field-type'),
-                    value: _type,
-                    items: const [
-                      DropdownMenuItem(
-                        value: SecurityType.stock,
-                        child: Text('股票'),
-                      ),
-                      DropdownMenuItem(
-                        value: SecurityType.fund,
-                        child: Text('基金'),
-                      ),
-                    ],
-                    onChanged: (value) {
-                      if (value != null) setState(() => _type = value);
-                    },
-                  ),
-                ],
-              ),
-              const SizedBox(height: 8),
-              TextField(
-                key: const ValueKey('field-name'),
-                controller: _nameController,
-                decoration: const InputDecoration(labelText: '名称'),
-              ),
-              const SizedBox(height: 8),
-              TextField(
-                key: const ValueKey('field-code'),
-                controller: _codeController,
-                decoration: const InputDecoration(labelText: '代码'),
-              ),
-              const SizedBox(height: 8),
-              TextField(
-                key: const ValueKey('field-quantity'),
-                controller: _quantityController,
-                keyboardType: numberKeyboard,
-                decoration: const InputDecoration(labelText: '数量'),
-              ),
-              const SizedBox(height: 8),
-              TextField(
-                key: const ValueKey('field-costPrice'),
-                controller: _costPriceController,
-                keyboardType: numberKeyboard,
-                decoration: const InputDecoration(labelText: '成本价'),
-              ),
-              const SizedBox(height: 8),
-              TextField(
-                key: const ValueKey('field-currentPrice'),
-                controller: _currentPriceController,
-                keyboardType: numberKeyboard,
-                decoration: const InputDecoration(
-                  labelText: '现价',
-                  hintText: '必须大于 0，同步失败保留上次有效值',
-                ),
-              ),
-              if (_error != null) ErrorBanner(message: _error!),
-              const SizedBox(height: 16),
-              SaveButton(onPressed: _save),
-              if (widget.editing != null) ...[
-                const SizedBox(height: 8),
-                OutlinedButton.icon(
-                  key: const ValueKey('delete-security-button'),
-                  onPressed: _delete,
-                  icon: const Icon(Icons.delete),
-                  label: const Text('删除证券'),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: <Widget>[
+            SectionHeader(
+              title: widget.editing == null ? '新增证券' : '编辑证券',
+              subtitle: '现价留空或为 0 时将保留上次有效值',
+              inset: false,
+            ),
+            Row(
+              children: <Widget>[
+                Icon(AppIcons.forSecurityType(_type),
+                    size: 18, color: AppColors.primary),
+                const SizedBox(width: 10),
+                const Text('类型'),
+                const SizedBox(width: 12),
+                DropdownButton<SecurityType>(
+                  key: const ValueKey('field-type'),
+                  value: _type,
+                  items: const <DropdownMenuItem<SecurityType>>[
+                    DropdownMenuItem(
+                      value: SecurityType.stock,
+                      child: Text('股票'),
+                    ),
+                    DropdownMenuItem(
+                      value: SecurityType.fund,
+                      child: Text('基金'),
+                    ),
+                  ],
+                  onChanged: (value) {
+                    if (value != null) setState(() => _type = value);
+                  },
                 ),
               ],
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              key: const ValueKey('field-name'),
+              controller: _nameController,
+              decoration: const InputDecoration(labelText: '名称'),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              key: const ValueKey('field-code'),
+              controller: _codeController,
+              decoration: const InputDecoration(labelText: '代码'),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              key: const ValueKey('field-quantity'),
+              controller: _quantityController,
+              keyboardType: numberKeyboard,
+              decoration: const InputDecoration(labelText: '数量'),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              key: const ValueKey('field-costPrice'),
+              controller: _costPriceController,
+              keyboardType: numberKeyboard,
+              decoration: const InputDecoration(labelText: '成本价'),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              key: const ValueKey('field-currentPrice'),
+              controller: _currentPriceController,
+              keyboardType: numberKeyboard,
+              decoration: const InputDecoration(
+                labelText: '现价',
+                hintText: '必须大于 0，同步失败保留上次有效值',
+              ),
+            ),
+            if (_error != null) ErrorBanner(message: _error!),
+            const SizedBox(height: 18),
+            PressFeedback(child: SaveButton(onPressed: _save)),
+            if (widget.editing != null) ...[
+              const SizedBox(height: 10),
+              OutlinedButton.icon(
+                key: const ValueKey('delete-security-button'),
+                onPressed: _delete,
+                icon: const Icon(Icons.delete),
+                label: const Text('删除证券'),
+              ),
             ],
-          ),
+          ],
         ),
       ),
     );

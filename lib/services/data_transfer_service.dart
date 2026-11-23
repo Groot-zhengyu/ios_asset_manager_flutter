@@ -8,6 +8,8 @@ import '../core/decimal.dart';
 import '../models/cash_account.dart';
 import '../models/enums.dart';
 import '../models/expense.dart';
+import '../models/fund_plan.dart';
+import '../models/recurring_rule.dart';
 import '../models/security.dart';
 import '../models/vehicle.dart';
 import '../repositories/app_repository.dart';
@@ -27,6 +29,8 @@ class ImportOutcome {
     this.vehicles = 0,
     this.expenses = 0,
     this.cashAccounts = 0,
+    this.recurringRules = 0,
+    this.fundPlans = 0,
     this.skipped = 0,
   });
 
@@ -34,13 +38,18 @@ class ImportOutcome {
   final int vehicles;
   final int expenses;
   final int cashAccounts;
+  final int recurringRules;
+  final int fundPlans;
   final int skipped;
 
-  int get total => securities + vehicles + expenses + cashAccounts;
+  int get total =>
+      securities + vehicles + expenses + cashAccounts + recurringRules + fundPlans;
 
   String get summary =>
       '导入完成：证券 $securities、车辆 $vehicles、费用 $expenses'
       '${cashAccounts > 0 ? '、现金 $cashAccounts' : ''}'
+      '${recurringRules > 0 ? '、周期规则 $recurringRules' : ''}'
+      '${fundPlans > 0 ? '、定投计划 $fundPlans' : ''}'
       '${skipped > 0 ? '，跳过 $skipped 条' : ''}';
 }
 
@@ -58,6 +67,8 @@ class DataTransferService {
     required List<Vehicle> vehicles,
     required List<Expense> expenses,
     required List<CashAccount> cashAccounts,
+    List<RecurringRule> recurringRules = const <RecurringRule>[],
+    List<FundPlan> fundPlans = const <FundPlan>[],
   }) {
     return ExportBundle(
       csv: buildCsv(
@@ -70,6 +81,8 @@ class DataTransferService {
         vehicles: vehicles,
         expenses: expenses,
         cashAccounts: cashAccounts,
+        recurringRules: recurringRules,
+        fundPlans: fundPlans,
       ),
     );
   }
@@ -140,6 +153,8 @@ class DataTransferService {
     required List<Vehicle> vehicles,
     required List<Expense> expenses,
     required List<CashAccount> cashAccounts,
+    List<RecurringRule> recurringRules = const <RecurringRule>[],
+    List<FundPlan> fundPlans = const <FundPlan>[],
   }) {
     final vehiclesById = {for (final v in vehicles) v.id: v};
     final document = <String, dynamic>{
@@ -190,6 +205,44 @@ class DataTransferService {
                 'updatedAt': a.updatedAt.toUtc().toIso8601String(),
               })
           .toList(),
+      'recurringRules': recurringRules
+          .map((r) => <String, dynamic>{
+                'id': r.id,
+                'title': r.title,
+                'type': r.type.rawValue,
+                'amount': r.amount.plainAmountString,
+                'dayOfMonth': r.dayOfMonth,
+                'note': r.note,
+                'vehicleId': r.vehicleId,
+                'enabled': r.enabled,
+                'lastAppliedMonth': r.lastAppliedMonth,
+                'createdAt': r.createdAt.toUtc().toIso8601String(),
+              })
+          .toList(),
+      'fundPlans': fundPlans
+          .map((p) => <String, dynamic>{
+                'id': p.id,
+                'fundCode': p.fundCode,
+                'fundName': p.fundName,
+                'amount': p.amount.plainAmountString,
+                'frequency': p.frequency.rawValue,
+                'dayOfMonth': p.dayOfMonth,
+                'weekday': p.weekday,
+                'enabled': p.enabled,
+                'nextRunDate': p.nextRunDate.toUtc().toIso8601String(),
+                'lastRunDate': p.lastRunDate?.toUtc().toIso8601String(),
+                'history': p.history
+                    .map((run) => <String, dynamic>{
+                          'id': run.id,
+                          'planId': run.planId,
+                          'date': run.date.toUtc().toIso8601String(),
+                          'amount': run.amount.plainAmountString,
+                          'note': run.note,
+                        })
+                    .toList(),
+                'createdAt': p.createdAt.toUtc().toIso8601String(),
+              })
+          .toList(),
     };
     return const JsonEncoder.withIndent('  ').convert(document);
   }
@@ -237,6 +290,8 @@ class DataTransferService {
     var vehicles = 0;
     var expenses = 0;
     var cashAccounts = 0;
+    var recurringRules = 0;
+    var fundPlans = 0;
     var skipped = 0;
 
     final existingSecurityIds = repository.fetchSecurities().map((e) => e.id).toSet();
@@ -244,6 +299,8 @@ class DataTransferService {
     final existingExpenseIds = repository.fetchExpenses().map((e) => e.id).toSet();
     final existingCashIds =
         repository.fetchCashAccounts().map((e) => e.id).toSet();
+    final existingRuleIds = repository.fetchRules().map((e) => e.id).toSet();
+    final existingPlanIds = repository.fetchPlans().map((e) => e.id).toSet();
 
     final vehicleList = (data['vehicles'] as List? ?? const [])
         .cast<Map<String, dynamic>>();
@@ -313,12 +370,40 @@ class DataTransferService {
       expenses += 1;
     }
 
+    final ruleList = (data['recurringRules'] as List? ?? const [])
+        .cast<Map<String, dynamic>>();
+    for (final json in ruleList) {
+      final rule = _ruleFromJson(json);
+      if (rule == null || existingRuleIds.contains(rule.id)) {
+        skipped += 1;
+        continue;
+      }
+      repository.saveRule(rule);
+      existingRuleIds.add(rule.id);
+      recurringRules += 1;
+    }
+
+    final planList = (data['fundPlans'] as List? ?? const [])
+        .cast<Map<String, dynamic>>();
+    for (final json in planList) {
+      final plan = _planFromJson(json);
+      if (plan == null || existingPlanIds.contains(plan.id)) {
+        skipped += 1;
+        continue;
+      }
+      repository.savePlan(plan);
+      existingPlanIds.add(plan.id);
+      fundPlans += 1;
+    }
+
     repository.persist();
     return ImportOutcome(
       securities: securities,
       vehicles: vehicles,
       expenses: expenses,
       cashAccounts: cashAccounts,
+      recurringRules: recurringRules,
+      fundPlans: fundPlans,
       skipped: skipped,
     );
   }
@@ -464,9 +549,7 @@ class DataTransferService {
       amount: amount,
       occurredAt: occurredAt,
       note: _string(j['note']) ?? '',
-      source: _string(j['source']) == 'ocr'
-          ? ExpenseSource.ocr
-          : ExpenseSource.manual,
+      source: ExpenseSourceX.fromRaw(_string(j['source'])),
       relatedAssetId: _string(j['relatedAssetId']),
       vehicleId: _string(j['vehicleId']),
       createdAt: _date(j['createdAt']) ?? occurredAt,
@@ -553,7 +636,7 @@ class DataTransferService {
       amount: amount,
       occurredAt: occurredAt,
       note: row['note'] ?? '',
-      source: row['source'] == 'ocr' ? ExpenseSource.ocr : ExpenseSource.manual,
+      source: ExpenseSourceX.fromRaw(row['source']),
       relatedAssetId: _nullIfEmpty(row['relatedAssetId']),
       vehicleId: _nullIfEmpty(row['vehicleId']),
       createdAt: _date(row['createdAt']) ?? occurredAt,
@@ -582,13 +665,74 @@ class DataTransferService {
   static String? _nullIfEmpty(String? value) =>
       (value == null || value.isEmpty) ? null : value;
 
-  static ExpenseType _expenseType(String? raw) => switch (raw) {
-        'fuel' => ExpenseType.fuel,
-        'etc' => ExpenseType.etc,
-        '油费' => ExpenseType.fuel,
-        'ETC 通行费' || 'ETC通行费' => ExpenseType.etc,
-        _ => ExpenseType.other,
-      };
+  static RecurringRule? _ruleFromJson(Map<String, dynamic> j) {
+    final id = _string(j['id']);
+    final title = _string(j['title']);
+    final amount = _dec(j['amount']);
+    if (id == null || title == null || amount == null || !amount.isPositive) {
+      return null;
+    }
+    return RecurringRule(
+      id: id,
+      title: title,
+      type: ExpenseTypeX.fromRaw(_string(j['type'])),
+      amount: amount,
+      dayOfMonth: ((j['dayOfMonth'] as num?)?.toInt().clamp(1, 31) ?? 1)
+          .toInt(),
+      note: _string(j['note']) ?? '',
+      vehicleId: _string(j['vehicleId']),
+      enabled: j['enabled'] as bool? ?? true,
+      lastAppliedMonth: _string(j['lastAppliedMonth']),
+      createdAt: _date(j['createdAt']) ?? DateTime.now(),
+    );
+  }
+
+  static FundPlan? _planFromJson(Map<String, dynamic> j) {
+    final id = _string(j['id']);
+    final code = _string(j['fundCode']);
+    final name = _string(j['fundName']);
+    final amount = _dec(j['amount']);
+    final nextRunDate = _date(j['nextRunDate']);
+    if (id == null ||
+        code == null ||
+        !RegExp(r'^\d{6}$').hasMatch(code) ||
+        name == null ||
+        amount == null ||
+        !amount.isPositive ||
+        nextRunDate == null) {
+      return null;
+    }
+    final history = (j['history'] as List? ?? const [])
+        .cast<Map<String, dynamic>>()
+        .map(
+          (run) => FundPlanRun(
+            id: _string(run['id']) ?? '',
+            planId: id,
+            date: _date(run['date']) ?? nextRunDate,
+            amount: _dec(run['amount']) ?? Dec.zero,
+            note: _string(run['note']) ?? '',
+          ),
+        )
+        .where((run) => run.id.isNotEmpty)
+        .toList();
+    return FundPlan(
+      id: id,
+      fundCode: code,
+      fundName: name,
+      amount: amount,
+      frequency: FundPlanFrequencyX.fromRaw(_string(j['frequency'])),
+      dayOfMonth: ((j['dayOfMonth'] as num?)?.toInt().clamp(1, 31) ?? 1)
+          .toInt(),
+      weekday: ((j['weekday'] as num?)?.toInt().clamp(1, 7) ?? 1).toInt(),
+      enabled: j['enabled'] as bool? ?? true,
+      nextRunDate: nextRunDate,
+      lastRunDate: _date(j['lastRunDate']),
+      history: history,
+      createdAt: _date(j['createdAt']) ?? DateTime.now(),
+    );
+  }
+
+  static ExpenseType _expenseType(String? raw) => ExpenseTypeX.fromRaw(raw);
 
   static Vehicle? _vehicleById(List<Vehicle> vehicles, String? id) {
     if (id == null) return null;

@@ -2,7 +2,7 @@
 
 > 用途：换电脑后据此无缝继续开发。
 > 仓库：`https://github.com/Groot-zhengyu/ios_asset_manager_flutter`（分支 `main`）
-> 交接时点：2026-11-23，提交 `e36a6ed`，工作区干净。
+> 交接时点：2026-11-23，远端 `main` 为 `28877ff`；本轮视觉重塑与记账/投资增强尚未提交，工作区有改动。
 > 原 SwiftUI 项目：`https://github.com/Groot-zhengyu/ios_asset_manager`（main 仍为 `6442794`，**未改动、不要混淆**）。
 
 ---
@@ -11,7 +11,11 @@
 
 一套 Flutter 代码同时产出 Android / iOS 的离线资产管理 App。功能口径对齐原 SwiftUI 版，但**代码完全独立、数据不互通**。
 
-当前状态：**功能完整**（51 个自动化测试全绿，含分辨率自适应专项），Android debug APK 构建成功并已在 API 35 模拟器完成端到端实测（OCR、真实行情、导出导入、App 锁、持久化均已跑通）。iOS 因开发环境是 Windows，尚未构建验证。
+当前状态：**功能完整**（69 个自动化测试全绿、静态分析 0 issue），Android debug APK 构建成功并已在 API 35 模拟器完成端到端实测（OCR、真实行情、导出导入、App 锁、持久化均已跑通）。iOS 因开发环境是 Windows，尚未构建验证。
+
+本轮新增两大块：
+1. **视觉重塑**：iOS 健身 App 风格主题（渐变背景、玻璃卡片、分段进度环、统一字体层级）、`AppMotion` 动效体系（列表入场、金额滚动、页面转场、按压反馈、减少动态效果降级）、`Responsive` 三档自适应（含一加 9 Pro 2K 屏）。
+2. **记账与投资增强**：多类别收支、每月固定收支规则、基金截图 OCR 识别与成本反推、基金定投计划管理；同时修复了同一微秒连续保存 id 碰撞导致记录互相覆盖的问题。
 
 ---
 
@@ -99,7 +103,7 @@ git clone https://github.com/Groot-zhengyu/ios_asset_manager_flutter.git
 cd ios_asset_manager_flutter
 flutter pub get
 flutter analyze     # 预期：No issues found
-flutter test        # 预期：26 tests，All tests passed
+flutter test        # 预期：69 tests，All tests passed
 ```
 
 ---
@@ -117,23 +121,30 @@ lib/
 │   ├── decimal.dart       # Dec 定点数（1e-6 微单位），金额运算唯一类型
 │   ├── errors.dart        # 表单错误文案（与 Swift 版 AppError 对齐）
 │   ├── date_format.dart   # yyyy-MM-dd HH:mm 等
-│   ├── theme.dart         # 主题 + 红涨绿跌配色
+│   ├── theme.dart         # AppColors / AppTheme：全局视觉令牌 + 页面转场
+│   ├── app_motion.dart    # AppMotion / StaggerEntrance / AnimatedCountText
+│   ├── responsive.dart    # 三档屏幕自适应与字体缩放钳制
 │   └── app_icons.dart     # 图标统一映射
-├── models/                # 9 个实体 / 枚举 / 表单 DTO
+├── models/                # 实体 / 枚举 / 表单 DTO（含 recurring_rule / fund_plan / fund_screenshot）
 ├── repositories/
 │   └── app_repository.dart  # AppRepository 抽象 + 内存实现 + JSON 文件实现
 ├── services/
 │   ├── asset_calculator.dart  # 总资产/盈亏唯一出口
-│   └── ocr_field_parser.dart  # OCR 文本→结构化字段
+│   ├── ocr_field_parser.dart  # 票据 OCR 文本→费用草稿
+│   ├── fund_screenshot_parser.dart  # 基金持仓截图 OCR 文本→基金草稿与反推
+│   ├── market_data_service.dart  # 股票/基金实时行情
+│   └── data_transfer_service.dart  # JSON / CSV 导入导出（含规则与定投）
 ├── features/              # 七个功能模块，每个页面自己管 UI 状态
-│   ├── overview/    # 总览 + 环形图 + 快速记账入口
-│   ├── record/      # 记账（粘贴 OCR + 手动）
-│   ├── expense/     # 费用明细 + ExpenseEditSheet
-│   ├── security/    # 证券列表 + SecurityEditSheet
+│   ├── overview/    # 总览 + 资产进度环 + 快速记账入口
+│   ├── record/      # 记账（拍照 / 粘贴 OCR + 手动）
+│   ├── expense/     # 费用明细 + 编辑 + 周期规则管理
+│   ├── security/    # 证券持仓 + 截图识别基金 + 定投计划
 │   ├── vehicle/     # 车辆列表 + 详情 + 编辑
-│   ├── reports/     # 费用报表
+│   ├── reports/     # 收支报表
 │   └── settings/    # App锁 / 行情刷新 / CSV导出 / 现金账户
-└── widgets/form_fields.dart  # MoneyField / ErrorBanner / SaveButton
+├── widgets/app_surfaces.dart  # AppBackdrop / AppCard / SectionHeader / PressFeedback / AnimatedCurrencyText
+├── widgets/asset_ring.dart    # 分段资产进度环
+└── widgets/form_fields.dart   # MoneyField / ErrorBanner / SaveButton
 ```
 
 ### 遗留代码（已清理）
@@ -156,6 +167,12 @@ lib/
 8. **删除车辆级联清理其费用**（`AppRepository.deleteVehicle` 里做了，内存和 JSON 两个实现都有）。
 9. **所有写操作返回 `String?`**：`null` = 成功，非空 = 错误文案，必须就地显示在表单内（`ErrorBanner`）。这是原版"点击保存无反应"bug 的根治手段，不要改回 bool 或只写状态不显示。
 10. **配色：盈利/上涨 = 红色，亏损/下跌 = 绿色**（国内习惯，与原版"盈绿亏红"相反，这是有意为之）。
+11. **收支语义由 `ExpenseType.group` 决定**：收入类（工资/红包/理财收入/其他收入）不计入支出；定投扣款单独计入 `totalInvestment`，不算日常支出。`Expense.signedCurrencyString` 负责正负展示。
+12. **油费 / ETC 归入「车辆」分组**：只有一辆车时 `AppState.defaultVehicleId()` 自动关联，多辆车才让用户手选；显式选择始终优先。
+13. **周期规则按自然月幂等**：`lastAppliedMonth` 为 `yyyy-MM`，同规则同月只入账一次；31 日规则在小月自动取月末；暂停期间不执行，删除规则不删除已生成记录。
+14. **基金截图只产草稿**：`FundScreenshotParser` 解析字段，确认页可逐项修正；确认后由 `saveFundFromScreenshot` 按「持有金额 / 当前净值 = 份额」反推成本净值并生成持仓。只有收益率时按 `成本 = 持有金额 / (1 + 收益率)` 反推；收益率按比率存储（12.34% = 0.1234），解析时必须除以 100，**曾出现过 100 倍换算错误**。当前净值缺失时按 1.0000 估算，**必须在界面提示用户核对**；基金代码重复时拒绝入库。
+15. **定投计划恢复不补扣**：暂停期间错过的日期在恢复时跳到未来下一个扣款日，不补记历史；修改频率/扣款日后立即按新计划重算。执行按 `plan.id + 日期` 幂等。
+16. **id 必须单调唯一**：`AppState._newId()` 带自增序列，避免同一微秒连续保存时 id 相同被仓储 upsert 覆盖。
 
 ---
 
@@ -180,9 +197,9 @@ lib/
 - `expense_report_view.dart`：占比条固定 64/84 宽改 `Flexible + FittedBox`（标签/金额随可用宽度收缩，字体放大自动缩放）；趋势图高度响应式。
 - `expense_list_view.dart` / `record_view.dart` / `settings_view.dart`：固定 `maxWidth: 720` 改为 `Responsive.contentMaxWidthOf(context)`。
 
-**验证**：新增 `test/responsive_test.dart` 9 个用例，覆盖一加 9 Pro（411×919/dpr3.5）、320 小屏、折叠屏、平板分档，内容宽度、环形图尺寸边界、字体缩放钳制。全量 **51 个测试全绿**（原 42 + 新增 9），`flutter analyze` 0 issue。
+**验证**：新增 `test/responsive_test.dart` 9 个用例，覆盖一加 9 Pro（411×919/dpr3.5）、320 小屏、折叠屏、平板分档，内容宽度、环形图尺寸边界、字体缩放钳制；另有 `test/visual_redesign_test.dart` 覆盖主题、动效降级与一加 9 Pro 尺寸无溢出。全量 **69 个测试全绿**，`flutter analyze` 0 issue。
 
-**注意**：环形图刻意只做 160~200 的小幅自适应（宽屏档固定 180）——它位于可滚动区，尺寸剧变会把下方分类列表挤出点击视口（曾导致 `overview_view_test` 点击失败，已据此收敛）。后续若调整此处尺寸，务必重跑该测试。
+**注意**：环形图刻意只做 160~200 的小幅自适应（宽屏档固定 180）——它位于可滚动区，尺寸剧变会把下方分类列表挤出点击视口（曾导致 `overview_view_test` 点击失败，已据此收敛）。后续若调整 `AssetRing` 尺寸，务必重跑该测试。
 
 ---
 
@@ -195,12 +212,23 @@ flutter build apk --debug       # → build/app/outputs/flutter-apk/app-debug.ap
 flutter build apk --release     # 发布用（会小很多，debug 版约 222M，含 ML Kit 模型）
 ```
 
-测试分布（共 42 个）：
+**本机 2026-11-23 构建环境坑**：`flutter build apk --debug` 必须显式带
+`JAVA_HOME=C:\Users\51199\jdk-21.0.13.1+2`，否则报 `JAVA_HOME is not set`。
+本轮代码改动后的 APK 重建卡在 Google Maven 拉取 Flutter 引擎 debug jar（`io.flutter:*_debug:1.0.0-4d357...`）：
+在线构建 30 分钟无字节写入（连接 `108.177.98.207:443`），`gradlew --offline` 报
+`No cached version available for offline mode`——jar 本体在
+`~/.gradle/caches/modules-2/files-2.1/io.flutter/` 里，但仓库元数据已失效。
+代码正确性已由 `flutter analyze` + 69 个测试覆盖；换网络后重新构建即可，或在 Mac/ CI 上出包。
+
+测试分布（共 69 个，含参数化 widget 测试的多次运行）：
 - `money_test.dart`：Dec 解析/运算/格式化
 - `security_vehicle_test.dart`：证券保存/现价校验/车辆级联删除
 - `security_edit_feedback_test.dart`：现价 0 / 必填缺失**在表单内就地报错**、千分位与货币符号可保存
 - `expense_flow_test.dart`：费用保存、OCR 解析、草稿确认
+- `finance_feature_test.dart`：类别兼容与收支口径、单辆车默认关联、周期规则幂等/小月/暂停/删除、基金截图解析与反推、重复代码拒绝、定投到期/暂停恢复/删除、截图与定投 UI 流程
 - `overview_view_test.dart`：总览渲染与快速记账回调
+- `visual_redesign_test.dart`：主题令牌、减少动态效果、金额动画、资产环、一加 9 Pro 尺寸无溢出、五标签转场
+- `responsive_test.dart`：一加 9 Pro / 320 小屏 / 折叠屏 / 平板分档与字体缩放钳制
 - `market_data_test.dart`：腾讯行情文本解析、0 价与 500 失败保留、天天基金 JSONP 估值/净值回落
 - `market_refresh_summary_test.dart`：刷新结论的四种文案（更新 / 价格无变化 / 未取到 / 无需刷新）
 - `data_transfer_test.dart`：原版 JSON / CSV 导入、按 id 去重、导出格式、设置持久化与 PIN 哈希

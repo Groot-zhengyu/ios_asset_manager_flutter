@@ -1,17 +1,20 @@
 import 'package:material_ui/material_ui.dart';
 
 import '../../core/app_icons.dart';
+import '../../core/app_motion.dart';
 import '../../core/app_state.dart';
 import '../../core/date_format.dart';
 import '../../core/decimal.dart';
 import '../../core/responsive.dart';
+import '../../core/theme.dart';
 import '../../models/enums.dart';
 import '../../models/expense.dart';
 import '../../models/forms.dart';
+import '../../widgets/app_surfaces.dart';
 import '../../widgets/form_fields.dart';
 
-/// 费用明细页：顶部汇总 + 类型/日期筛选 + 明细列表 + 新增入口。
-/// 页面只接收 AppState，所有写操作错误就地反馈。
+/// 费用明细页：顶部汇总 + 筛选 + 明细列表 + 新增入口。
+/// 写操作与错误反馈逻辑保持不变，仅统一视觉与动效。
 class ExpenseListView extends StatefulWidget {
   const ExpenseListView({
     super.key,
@@ -22,8 +25,6 @@ class ExpenseListView extends StatefulWidget {
 
   final AppState state;
   final VoidCallback? onSaved;
-
-  /// 嵌在外层 Scaffold 里时传 false，避免重复标题栏。
   final bool showAppBar;
 
   @override
@@ -94,6 +95,7 @@ class _ExpenseListViewState extends State<ExpenseListView> {
 
   @override
   Widget build(BuildContext context) {
+    final gutter = Responsive.gutterOf(context);
     return Scaffold(
       appBar: widget.showAppBar ? AppBar(title: const Text('费用明细')) : null,
       body: SafeArea(
@@ -108,12 +110,14 @@ class _ExpenseListViewState extends State<ExpenseListView> {
                   children: <Widget>[
                     _SummaryCard(
                       total: widget.state.totalExpense,
+                      income: widget.state.totalIncome,
+                      investment: widget.state.totalInvestment,
                       fuel: _subtotal(ExpenseType.fuel),
                       etc: _subtotal(ExpenseType.etc),
                       other: _subtotal(ExpenseType.other),
                     ),
                     Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      padding: EdgeInsets.symmetric(horizontal: gutter),
                       child: Row(
                         children: <Widget>[
                           Expanded(
@@ -122,6 +126,7 @@ class _ExpenseListViewState extends State<ExpenseListView> {
                               initialValue: _typeFilter,
                               decoration: const InputDecoration(
                                 labelText: '类型',
+                                prefixIcon: Icon(Icons.filter_list),
                               ),
                               items: <DropdownMenuItem<ExpenseType?>>[
                                 const DropdownMenuItem<ExpenseType?>(
@@ -131,7 +136,9 @@ class _ExpenseListViewState extends State<ExpenseListView> {
                                 ...ExpenseType.values.map(
                                   (type) => DropdownMenuItem<ExpenseType?>(
                                     value: type,
-                                    child: Text(type.displayName),
+                                    child: Text(
+                                      '${type.group.displayName} · ${type.displayName}',
+                                    ),
                                   ),
                                 ),
                               ],
@@ -142,11 +149,13 @@ class _ExpenseListViewState extends State<ExpenseListView> {
                           ),
                           const SizedBox(width: 12),
                           Expanded(
-                            child: FilledButton.icon(
-                              key: const ValueKey('add-expense-button'),
-                              onPressed: () => _openEdit(),
-                              icon: const Icon(Icons.add),
-                              label: const Text('新增费用'),
+                            child: PressFeedback(
+                              child: FilledButton.icon(
+                                key: const ValueKey('add-expense-button'),
+                                onPressed: () => _openEdit(),
+                                icon: const Icon(Icons.add),
+                                label: const Text('新增费用'),
+                              ),
                             ),
                           ),
                         ],
@@ -154,7 +163,7 @@ class _ExpenseListViewState extends State<ExpenseListView> {
                     ),
                     const SizedBox(height: 8),
                     Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      padding: EdgeInsets.symmetric(horizontal: gutter),
                       child: SegmentedButton<_DateRange>(
                         key: const ValueKey('expense-range-filter'),
                         segments: _DateRange.values
@@ -174,7 +183,7 @@ class _ExpenseListViewState extends State<ExpenseListView> {
                     ),
                     if (_error != null)
                       Padding(
-                        padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+                        padding: EdgeInsets.fromLTRB(gutter, 8, gutter, 0),
                         child: ErrorBanner(message: _error!),
                       ),
                     Expanded(child: _buildList()),
@@ -191,13 +200,22 @@ class _ExpenseListViewState extends State<ExpenseListView> {
   Widget _buildList() {
     final items = _filtered;
     if (items.isEmpty) {
-      return const Center(
+      return Center(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: <Widget>[
-            Icon(Icons.receipt_long, size: 48),
-            SizedBox(height: 8),
-            Text('暂无费用记录'),
+            Container(
+              width: 72,
+              height: 72,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: AppColors.primarySoft,
+              ),
+              child: const Icon(Icons.receipt_long,
+                  size: 32, color: AppColors.primary),
+            ),
+            const SizedBox(height: 12),
+            Text('暂无费用记录', style: Theme.of(context).textTheme.bodyMedium),
           ],
         ),
       );
@@ -208,41 +226,52 @@ class _ExpenseListViewState extends State<ExpenseListView> {
       itemCount: items.length,
       itemBuilder: (context, index) {
         final item = items[index];
-        return Card(
-          child: ListTile(
-            key: ValueKey('expense-${item.id}'),
-            leading: Icon(AppIcons.forExpenseType(item.type)),
-            title: Row(
-              children: <Widget>[
-                Text(item.type.displayName),
-                const Spacer(),
-                Text(
-                  item.amount.currencyString,
-                  style: const TextStyle(fontWeight: FontWeight.w600),
-                ),
-              ],
-            ),
-            subtitle: Text(
-              '${AppDateFormat.dateTime(item.occurredAt)}\n'
-              '${item.note.isEmpty ? '（无备注）' : item.note} · ${item.source.displayName}',
-            ),
-            isThreeLine: true,
-            trailing: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: <Widget>[
-                IconButton(
-                  key: ValueKey('edit-expense-${item.id}'),
-                  icon: const Icon(AppIcons.edit),
-                  tooltip: '编辑',
-                  onPressed: () => _openEdit(editing: item),
-                ),
-                IconButton(
-                  key: ValueKey('delete-expense-${item.id}'),
-                  icon: const Icon(AppIcons.delete),
-                  tooltip: '删除',
-                  onPressed: () => _delete(item),
-                ),
-              ],
+        final color = AppColors.expenseTypeColor(item.type);
+        return StaggerEntrance(
+          index: index,
+          child: AppCard(
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+            child: ListTile(
+              key: ValueKey('expense-${item.id}'),
+              leading: CircleAvatar(
+                backgroundColor: color.withValues(alpha: 0.13),
+                child: Icon(AppIcons.forExpenseType(item.type),
+                    color: color, size: 20),
+              ),
+              title: Row(
+                children: <Widget>[
+                  Text(item.type.displayName),
+                  const Spacer(),
+                  Text(
+                    item.signedCurrencyString,
+                    style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                          color: item.isIncome ? AppColors.mint : AppColors.ink,
+                        ),
+                  ),
+                ],
+              ),
+              subtitle: Text(
+                '${AppDateFormat.dateTime(item.occurredAt)}\n'
+                '${item.note.isEmpty ? '（无备注）' : item.note} · ${item.source.displayName}',
+              ),
+              isThreeLine: true,
+              trailing: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: <Widget>[
+                  IconButton(
+                    key: ValueKey('edit-expense-${item.id}'),
+                    icon: const Icon(AppIcons.edit, size: 20),
+                    tooltip: '编辑',
+                    onPressed: () => _openEdit(editing: item),
+                  ),
+                  IconButton(
+                    key: ValueKey('delete-expense-${item.id}'),
+                    icon: const Icon(AppIcons.delete, size: 20),
+                    tooltip: '删除',
+                    onPressed: () => _delete(item),
+                  ),
+                ],
+              ),
             ),
           ),
         );
@@ -254,54 +283,89 @@ class _ExpenseListViewState extends State<ExpenseListView> {
 class _SummaryCard extends StatelessWidget {
   const _SummaryCard({
     required this.total,
+    required this.income,
+    required this.investment,
     required this.fuel,
     required this.etc,
     required this.other,
   });
 
   final Dec total;
+  final Dec income;
+  final Dec investment;
   final Dec fuel;
   final Dec etc;
   final Dec other;
 
   @override
   Widget build(BuildContext context) {
-    return Card(
-      margin: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: <Widget>[
-            Text('总支出', style: Theme.of(context).textTheme.bodySmall),
-            const SizedBox(height: 4),
-            Text(
-              total.currencyString,
-              key: const ValueKey('expense-total'),
-              style: Theme.of(context).textTheme.headlineSmall
-                  ?.copyWith(fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 12),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: <Widget>[
-                _Subtotal(label: '油费', value: fuel.currencyString),
-                _Subtotal(label: 'ETC', value: etc.currencyString),
-                _Subtotal(label: '其他', value: other.currencyString),
-              ],
-            ),
-          ],
-        ),
+    final gutter = Responsive.gutterOf(context);
+    return AppCard(
+      margin: EdgeInsets.fromLTRB(gutter, 12, gutter, 8),
+      tint: AppColors.vehicle,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: <Widget>[
+          Row(
+            children: <Widget>[
+              Icon(Icons.payments_outlined,
+                  size: 16, color: AppColors.vehicle),
+              const SizedBox(width: 8),
+              Text('总支出', style: Theme.of(context).textTheme.bodyMedium),
+            ],
+          ),
+          const SizedBox(height: 8),
+          AnimatedCurrencyText(
+            key: const ValueKey('expense-total'),
+            value: total,
+            style: Theme.of(context).textTheme.headlineMedium,
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: <Widget>[
+              Expanded(
+                child: _Subtotal(
+                  label: '收入合计',
+                  value: income.currencyString,
+                  accent: AppColors.mint,
+                ),
+              ),
+              Expanded(
+                child: _Subtotal(
+                  label: '定投合计',
+                  value: investment.currencyString,
+                  accent: AppColors.primary,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          const Divider(),
+          const SizedBox(height: 10),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: <Widget>[
+              Flexible(child: _Subtotal(label: '油费', value: fuel.currencyString)),
+              Flexible(child: _Subtotal(label: 'ETC', value: etc.currencyString)),
+              Flexible(child: _Subtotal(label: '其他', value: other.currencyString)),
+            ],
+          ),
+        ],
       ),
     );
   }
 }
 
 class _Subtotal extends StatelessWidget {
-  const _Subtotal({required this.label, required this.value});
+  const _Subtotal({
+    required this.label,
+    required this.value,
+    this.accent,
+  });
 
   final String label;
   final String value;
+  final Color? accent;
 
   @override
   Widget build(BuildContext context) {
@@ -310,14 +374,22 @@ class _Subtotal extends StatelessWidget {
       children: <Widget>[
         Text(label, style: Theme.of(context).textTheme.bodySmall),
         const SizedBox(height: 4),
-        Text(value, style: Theme.of(context).textTheme.titleSmall),
+        FittedBox(
+          fit: BoxFit.scaleDown,
+          alignment: Alignment.centerLeft,
+          child: Text(
+            value,
+            style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                  color: accent,
+                ),
+          ),
+        ),
       ],
     );
   }
 }
 
-/// 费用新增/编辑表单。
-/// 保存失败时在表单内就地显示 ErrorBanner，成功后再关闭并回调。
+/// 费用新增/编辑表单：错误就地反馈，成功后再关闭并回调。
 class ExpenseEditSheet extends StatefulWidget {
   const ExpenseEditSheet({
     super.key,
@@ -352,7 +424,11 @@ class _ExpenseEditSheetState extends State<ExpenseEditSheet> {
     );
     _noteController = TextEditingController(text: editing?.note ?? '');
     _occurredAt = editing?.occurredAt ?? DateTime.now();
-    _vehicleId = editing?.vehicleId ?? '';
+    final onlyVehicle = widget.state.vehicles.length == 1
+        ? widget.state.vehicles.single.id
+        : null;
+    _vehicleId =
+        editing?.vehicleId ?? (_type.isVehicle ? onlyVehicle ?? '' : '');
   }
 
   @override
@@ -414,27 +490,19 @@ class _ExpenseEditSheetState extends State<ExpenseEditSheet> {
       child: SingleChildScrollView(
         padding: EdgeInsets.fromLTRB(
           20,
-          12,
+          8,
           20,
           MediaQuery.of(context).viewInsets.bottom + 24,
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: <Widget>[
-            Container(
-              width: 40,
-              height: 4,
-              margin: const EdgeInsets.only(bottom: 16),
-              decoration: BoxDecoration(
-                color: Theme.of(context).dividerColor,
-                borderRadius: BorderRadius.circular(2),
-              ),
+            SectionHeader(
+              title: widget.editing == null ? '新增费用' : '编辑费用',
+              subtitle: '保存后即刻计入收支统计',
+              inset: false,
             ),
-            Text(
-              widget.editing == null ? '新增费用' : '编辑费用',
-              style: Theme.of(context).textTheme.titleMedium,
-            ),
-            const SizedBox(height: 12),
+            const SizedBox(height: 4),
             DropdownButtonFormField<ExpenseType>(
               initialValue: _type,
               decoration: const InputDecoration(labelText: '类型'),
@@ -444,26 +512,33 @@ class _ExpenseEditSheetState extends State<ExpenseEditSheet> {
                       value: type,
                       child: Row(
                         children: <Widget>[
-                          Icon(AppIcons.forExpenseType(type), size: 18),
+                          Icon(AppIcons.forExpenseType(type),
+                              size: 18, color: AppColors.expenseTypeColor(type)),
                           const SizedBox(width: 8),
-                          Text(type.displayName),
+                          Text('${type.group.displayName} · ${type.displayName}'),
                         ],
                       ),
                     ),
                   )
                   .toList(),
               onChanged: (value) {
-                if (value != null) setState(() => _type = value);
+                if (value == null) return;
+                setState(() {
+                  _type = value;
+                  if (value.isVehicle && widget.state.vehicles.length == 1) {
+                    _vehicleId = widget.state.vehicles.single.id;
+                  }
+                });
               },
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: 14),
             MoneyField(
               controller: _amountController,
               label: '金额',
               icon: Icons.attach_money,
               hint: '例如 300.00',
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: 14),
             InkWell(
               key: const ValueKey('pick-datetime'),
               onTap: _pickDateTime,
@@ -475,7 +550,7 @@ class _ExpenseEditSheetState extends State<ExpenseEditSheet> {
                 child: Text(AppDateFormat.dateTime(_occurredAt)),
               ),
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: 14),
             TextField(
               key: const ValueKey('field-note'),
               controller: _noteController,
@@ -484,26 +559,53 @@ class _ExpenseEditSheetState extends State<ExpenseEditSheet> {
                 prefixIcon: Icon(Icons.notes),
               ),
             ),
-            const SizedBox(height: 12),
-            DropdownButtonFormField<String>(
-              initialValue: _vehicleId,
-              decoration: const InputDecoration(labelText: '关联车辆'),
-              items: <DropdownMenuItem<String>>[
-                const DropdownMenuItem<String>(value: '', child: Text('不关联车辆')),
-                ...widget.state.vehicles.map(
-                  (vehicle) => DropdownMenuItem<String>(
-                    value: vehicle.id,
-                    child: Text('${vehicle.model} · ${vehicle.plateNumber}'),
+            if (_type.isVehicle) ...[
+              const SizedBox(height: 14),
+              if (widget.state.vehicles.length == 1)
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 14, vertical: 12),
+                  decoration: BoxDecoration(
+                    color: AppColors.primarySoft,
+                    borderRadius: BorderRadius.circular(14),
                   ),
+                  child: Row(
+                    children: <Widget>[
+                      const Icon(Icons.directions_car,
+                          size: 18, color: AppColors.primary),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          '已默认关联：${widget.state.vehicles.single.model}',
+                          style: Theme.of(context).textTheme.bodySmall,
+                        ),
+                      ),
+                    ],
+                  ),
+                )
+              else
+                DropdownButtonFormField<String>(
+                  initialValue: _vehicleId.isEmpty ? null : _vehicleId,
+                  decoration: const InputDecoration(
+                    labelText: '关联车辆',
+                    prefixIcon: Icon(Icons.directions_car),
+                  ),
+                  items: <DropdownMenuItem<String>>[
+                    const DropdownMenuItem<String>(
+                        value: '', child: Text('不关联车辆')),
+                    ...widget.state.vehicles.map(
+                      (vehicle) => DropdownMenuItem<String>(
+                        value: vehicle.id,
+                        child: Text('${vehicle.model} · ${vehicle.plateNumber}'),
+                      ),
+                    ),
+                  ],
+                  onChanged: (value) => setState(() => _vehicleId = value ?? ''),
                 ),
-              ],
-              onChanged: (value) {
-                if (value != null) setState(() => _vehicleId = value);
-              },
-            ),
+            ],
             if (_error != null) ErrorBanner(message: _error!),
-            const SizedBox(height: 12),
-            SaveButton(onPressed: _attemptSave),
+            const SizedBox(height: 18),
+            PressFeedback(child: SaveButton(onPressed: _attemptSave)),
             const SizedBox(height: 8),
           ],
         ),

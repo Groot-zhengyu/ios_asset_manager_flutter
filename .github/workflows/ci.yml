@@ -52,3 +52,30 @@ jobs:
           name: asset-manager-release-apk
           path: build/app/outputs/flutter-apk/app-release.apk
           retention-days: 30
+
+  release-apk:
+    name: 发布 APK 到 Release
+    runs-on: ubuntu-latest
+    needs: build-apk
+    if: github.event_name != 'pull_request'
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: asset-manager-release-apk
+          path: dist
+      - name: 计算版本号
+        id: ver
+        run: echo "tag=v$(date +'%Y%m%d-%H%M')" >> "$GITHUB_OUTPUT"
+      - name: 创建 Release 并上传 APK
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.ver.outputs.tag }}
+          name: Android Release ${{ steps.ver.outputs.tag }}
+          body: |
+            本版本包含：iOS 健身风格视觉重塑、多类别收支管理、每月固定收支规则、基金截图识别、基金定投管理。
+            - Flutter 3.50.1 / 69 个自动化测试全绿
+            - 日志见对应 commit
+          files: dist/app-release.apk
+          overwrite_files: true

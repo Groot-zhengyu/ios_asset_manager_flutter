@@ -20,7 +20,15 @@ class AppIcons {
   static IconData forExpenseType(ExpenseType type) => switch (type) {
         ExpenseType.fuel => Icons.local_gas_station,
         ExpenseType.etc => Icons.route,
+        ExpenseType.food => Icons.restaurant,
+        ExpenseType.movie => Icons.movie,
+        ExpenseType.gift => Icons.card_giftcard,
         ExpenseType.other => Icons.more_horiz,
+        ExpenseType.investment => Icons.trending_up,
+        ExpenseType.salary => Icons.payments,
+        ExpenseType.redPacket => Icons.redeem,
+        ExpenseType.financeIncome => Icons.savings,
+        ExpenseType.otherIncome => Icons.add_circle_outline,
       };
 
   static const IconData overview = Icons.dashboard;

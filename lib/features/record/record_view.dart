@@ -2,16 +2,19 @@ import 'package:image_picker/image_picker.dart';
 import 'package:material_ui/material_ui.dart';
 
 import '../../core/app_icons.dart';
+import '../../core/app_motion.dart';
 import '../../core/app_state.dart';
 import '../../core/date_format.dart';
 import '../../core/decimal.dart';
 import '../../core/responsive.dart';
+import '../../core/theme.dart';
 import '../../models/enums.dart';
 import '../../models/ocr_draft.dart';
 import '../../models/ocr_result.dart';
 import '../../services/ocr_field_parser.dart';
 import '../../services/ocr_service.dart';
 import '../expense/expense_list_view.dart';
+import '../../widgets/app_surfaces.dart';
 import '../../widgets/form_fields.dart';
 
 /// 快速记账页：拍照 / 相册 OCR、粘贴文本解析、手动记账三个入口。
@@ -26,8 +29,6 @@ class RecordView extends StatefulWidget {
 
   final AppState state;
   final VoidCallback? onSaved;
-
-  /// 作为外层 Scaffold 的 body 使用时传 false，避免出现两个标题栏。
   final bool showAppBar;
 
   @override
@@ -133,6 +134,7 @@ class _RecordViewState extends State<RecordView> {
 
   @override
   Widget build(BuildContext context) {
+    final gutter = Responsive.gutterOf(context);
     return Scaffold(
       appBar: widget.showAppBar ? AppBar(title: const Text('快速记账')) : null,
       body: SafeArea(
@@ -144,43 +146,77 @@ class _RecordViewState extends State<RecordView> {
                   maxWidth: Responsive.contentMaxWidthOf(context),
                 ),
                 child: ListView(
-                  padding: const EdgeInsets.all(16),
+                  padding: const EdgeInsets.only(bottom: 24),
                   children: <Widget>[
-                    _EntryCard(
-                      key: const ValueKey('ocr-entry'),
-                      icon: Icons.photo_camera_outlined,
-                      color: const Color(0xFF2E6B5E),
-                      title: '拍照识别',
-                      subtitle: _recognizing
-                          ? '正在识别图片，请稍候…'
-                          : '相机拍照或从相册选图，自动识别金额、类型与日期',
-                      onTap: _recognizing ? () {} : _openOcrMenu,
-                      trailing: _recognizing
-                          ? const SizedBox(
-                              width: 20,
-                              height: 20,
-                              child: CircularProgressIndicator(strokeWidth: 2),
-                            )
-                          : null,
+                    StaggerEntrance(
+                      index: 0,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: <Widget>[
+                          SectionHeader(
+                            title: '快速记账',
+                            subtitle: '让票据识别替你输入，确认后才入库',
+                          ),
+                          _EntryCard(
+                            key: const ValueKey('ocr-entry'),
+                            icon: Icons.photo_camera_outlined,
+                            tint: AppColors.mint,
+                            title: '拍照识别',
+                            subtitle: _recognizing
+                                ? '正在识别图片，请稍候…'
+                                : '相机拍照或从相册选图，自动识别金额、类型与日期',
+                            onTap: _recognizing ? () {} : _openOcrMenu,
+                            trailing: _recognizing
+                                ? const SizedBox(
+                                    width: 20,
+                                    height: 20,
+                                    child:
+                                        CircularProgressIndicator(strokeWidth: 2),
+                                  )
+                                : null,
+                          ),
+                          if (_ocrError != null) ...[
+                            const SizedBox(height: 10),
+                            Padding(
+                              padding: EdgeInsets.symmetric(horizontal: gutter),
+                              child: ErrorBanner(message: _ocrError!),
+                            ),
+                          ],
+                        ],
+                      ),
                     ),
-                    if (_ocrError != null) ...[
-                      const SizedBox(height: 8),
-                      ErrorBanner(message: _ocrError!),
-                    ],
-                    const SizedBox(height: 12),
-                    _EntryCard(
-                      key: const ValueKey('manual-entry'),
-                      icon: AppIcons.quickRecord,
-                      color: Colors.indigo,
-                      title: '手动记账',
-                      subtitle: '自己填写费用类型、金额与备注',
-                      onTap: _openManual,
+                    const SizedBox(height: 14),
+                    StaggerEntrance(
+                      index: 1,
+                      child: _EntryCard(
+                        key: const ValueKey('manual-entry'),
+                        icon: AppIcons.quickRecord,
+                        tint: AppColors.primary,
+                        title: '手动记账',
+                        subtitle: '自己填写费用类型、金额与备注',
+                        onTap: _openManual,
+                      ),
                     ),
-                    const SizedBox(height: 16),
-                    Text(
-                      '提示：识别结果会先进入确认页，确认无误后才会生成费用记录。'
-                      '图片只在本机识别，不会上传。',
-                      style: Theme.of(context).textTheme.bodySmall,
+                    const SizedBox(height: 18),
+                    StaggerEntrance(
+                      index: 2,
+                      child: AppCard(
+                        tint: AppColors.violet,
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: <Widget>[
+                            const Icon(Icons.privacy_tip_outlined,
+                                size: 18, color: AppColors.violet),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: Text(
+                                '识别结果会先进入确认页，确认无误后才会生成费用记录。图片只在本机识别，不会上传。',
+                                style: Theme.of(context).textTheme.bodySmall,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
                     ),
                   ],
                 ),
@@ -197,7 +233,7 @@ class _EntryCard extends StatelessWidget {
   const _EntryCard({
     super.key,
     required this.icon,
-    required this.color,
+    required this.tint,
     required this.title,
     required this.subtitle,
     required this.onTap,
@@ -205,7 +241,7 @@ class _EntryCard extends StatelessWidget {
   });
 
   final IconData icon;
-  final Color color;
+  final Color tint;
   final String title;
   final String subtitle;
   final VoidCallback onTap;
@@ -213,16 +249,24 @@ class _EntryCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Card(
-      child: ListTile(
-        leading: CircleAvatar(
-          backgroundColor: color,
-          child: Icon(icon, color: Colors.white),
+    return Padding(
+      padding: EdgeInsets.symmetric(horizontal: Responsive.gutterOf(context)),
+      child: PressFeedback(
+        child: AppCard(
+          showSheen: true,
+          tint: tint,
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+          onTap: onTap,
+          child: ListTile(
+            leading: CircleAvatar(
+              backgroundColor: tint.withValues(alpha: 0.14),
+              child: Icon(icon, color: tint, size: 22),
+            ),
+            title: Text(title, style: Theme.of(context).textTheme.titleMedium),
+            subtitle: Text(subtitle),
+            trailing: trailing ?? const Icon(Icons.chevron_right),
+          ),
         ),
-        title: Text(title, style: const TextStyle(fontWeight: FontWeight.w600)),
-        subtitle: Text(subtitle),
-        trailing: trailing ?? const Icon(Icons.chevron_right),
-        onTap: onTap,
       ),
     );
   }
@@ -246,31 +290,36 @@ class _OcrSourceSheet extends StatelessWidget {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: <Widget>[
-          Padding(
-            padding: const EdgeInsets.fromLTRB(20, 4, 20, 8),
-            child: Text(
-              '选择识别方式',
-              style: Theme.of(context).textTheme.titleMedium,
-              textAlign: TextAlign.center,
-            ),
-          ),
+          const SectionHeader(title: '选择识别方式', subtitle: '图片仅在本机处理'),
           ListTile(
             key: const ValueKey('ocr-camera'),
-            leading: const Icon(Icons.photo_camera),
+            leading: CircleAvatar(
+              backgroundColor: AppColors.mint.withValues(alpha: 0.13),
+              child: const Icon(Icons.photo_camera,
+                  color: AppColors.mint, size: 20),
+            ),
             title: const Text('拍照识别'),
             subtitle: const Text('对准票据拍照，自动识别'),
             onTap: onCamera,
           ),
           ListTile(
             key: const ValueKey('ocr-gallery'),
-            leading: const Icon(Icons.photo_library),
+            leading: CircleAvatar(
+              backgroundColor: AppColors.primarySoft,
+              child: const Icon(Icons.photo_library,
+                  color: AppColors.primary, size: 20),
+            ),
             title: const Text('从相册选择'),
             subtitle: const Text('选一张已有的票据截图'),
             onTap: onGallery,
           ),
           ListTile(
             key: const ValueKey('ocr-paste'),
-            leading: const Icon(Icons.content_paste),
+            leading: CircleAvatar(
+              backgroundColor: AppColors.violetSoft,
+              child: const Icon(Icons.content_paste,
+                  color: AppColors.violet, size: 20),
+            ),
             title: const Text('粘贴文本解析'),
             subtitle: const Text('已复制票据文字时使用'),
             onTap: onPaste,
@@ -326,20 +375,18 @@ class _OcrPasteSheetState extends State<_OcrPasteSheet> {
       child: SingleChildScrollView(
         padding: EdgeInsets.fromLTRB(
           20,
-          12,
+          8,
           20,
           MediaQuery.of(context).viewInsets.bottom + 24,
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: <Widget>[
-            Text('粘贴识别文本', style: Theme.of(context).textTheme.titleMedium),
-            const SizedBox(height: 6),
-            Text(
-              '把票据 OCR 后的文字粘贴到下方，解析后进入确认页。',
-              style: Theme.of(context).textTheme.bodySmall,
+            const SectionHeader(
+              title: '粘贴识别文本',
+              subtitle: '把票据 OCR 后的文字粘贴到下方，解析后进入确认页',
+              inset: false,
             ),
-            const SizedBox(height: 12),
             TextField(
               key: const ValueKey('ocr-text-field'),
               controller: _controller,
@@ -351,12 +398,14 @@ class _OcrPasteSheetState extends State<_OcrPasteSheet> {
               ),
             ),
             if (_error != null) ErrorBanner(message: _error!),
-            const SizedBox(height: 12),
-            FilledButton.icon(
-              key: const ValueKey('ocr-parse-button'),
-              onPressed: _parse,
-              icon: Icon(AppIcons.ocr),
-              label: const Text('解析'),
+            const SizedBox(height: 16),
+            PressFeedback(
+              child: FilledButton.icon(
+                key: const ValueKey('ocr-parse-button'),
+                onPressed: _parse,
+                icon: Icon(AppIcons.ocr),
+                label: const Text('解析'),
+              ),
             ),
           ],
         ),
@@ -475,92 +524,105 @@ class _OcrConfirmSheetState extends State<_OcrConfirmSheet> {
   Widget build(BuildContext context) {
     final confidenceText =
         '${(widget.result.confidence * 100).toStringAsFixed(0)}%';
+    final lowConfidence = widget.result.confidence < 0.5;
     return SafeArea(
       child: SingleChildScrollView(
         padding: EdgeInsets.fromLTRB(
           20,
-          12,
+          8,
           20,
           MediaQuery.of(context).viewInsets.bottom + 24,
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: <Widget>[
-            Container(
-              width: 40,
-              height: 4,
-              margin: const EdgeInsets.only(bottom: 16),
-              decoration: BoxDecoration(
-                color: Theme.of(context).dividerColor,
-                borderRadius: BorderRadius.circular(2),
-              ),
+            SectionHeader(
+              title: '确认识别结果',
+              subtitle: '核对后再入库，取消不会留下记录',
+              inset: false,
             ),
-            Text('确认识别结果', style: Theme.of(context).textTheme.titleMedium),
-            const SizedBox(height: 8),
             Row(
               children: <Widget>[
-                const Icon(Icons.visibility, size: 18),
-                const SizedBox(width: 8),
+                Container(
+                  width: 28,
+                  height: 28,
+                  decoration: BoxDecoration(
+                    color: (lowConfidence ? AppColors.vehicle : AppColors.mint)
+                        .withValues(alpha: 0.14),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Icon(
+                    Icons.visibility,
+                    size: 16,
+                    color: lowConfidence ? AppColors.vehicle : AppColors.mint,
+                  ),
+                ),
+                const SizedBox(width: 10),
                 Text(
                   '置信度 $confidenceText',
                   key: const ValueKey('ocr-confidence'),
+                  style: Theme.of(context).textTheme.bodyMedium,
                 ),
               ],
             ),
-            if (widget.result.confidence < 0.5)
-              Container(
-                key: const ValueKey('ocr-low-confidence-warning'),
-                margin: const EdgeInsets.only(top: 8),
-                padding: const EdgeInsets.all(10),
-                decoration: BoxDecoration(
-                  color: const Color(0xFFFFF3CD),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: const Row(
-                  children: <Widget>[
-                    Icon(
-                      Icons.warning_amber_rounded,
-                      size: 18,
-                      color: Color(0xFF856404),
+            if (lowConfidence)
+              Padding(
+                padding: const EdgeInsets.only(top: 12),
+                child: Container(
+                  key: const ValueKey('ocr-low-confidence-warning'),
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: AppColors.vehicle.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(
+                      color: AppColors.vehicle.withValues(alpha: 0.28),
                     ),
-                    SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        '置信度较低，请核对',
-                        style: TextStyle(color: Color(0xFF856404)),
+                  ),
+                  child: Row(
+                    children: <Widget>[
+                      const Icon(Icons.warning_amber_rounded,
+                          size: 18, color: AppColors.vehicle),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          '置信度较低，请核对',
+                          style: Theme.of(context).textTheme.bodyMedium
+                              ?.copyWith(color: AppColors.ink),
+                        ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               ),
             if (widget.rawText.trim().isNotEmpty)
-              Theme(
-                data: Theme.of(context)
-                    .copyWith(dividerColor: Colors.transparent),
-                child: ExpansionTile(
-                  key: const ValueKey('ocr-raw-text'),
-                  tilePadding: EdgeInsets.zero,
-                  childrenPadding: const EdgeInsets.only(bottom: 8),
-                  title: const Text('查看识别原文'),
-                  children: <Widget>[
-                    Container(
-                      width: double.infinity,
-                      padding: const EdgeInsets.all(10),
-                      decoration: BoxDecoration(
-                        color: Theme.of(context)
-                            .colorScheme
-                            .surfaceContainerHighest,
-                        borderRadius: BorderRadius.circular(8),
+              Padding(
+                padding: const EdgeInsets.only(top: 12),
+                child: Theme(
+                  data: Theme.of(context)
+                      .copyWith(dividerColor: Colors.transparent),
+                  child: ExpansionTile(
+                    key: const ValueKey('ocr-raw-text'),
+                    tilePadding: EdgeInsets.zero,
+                    childrenPadding: const EdgeInsets.only(bottom: 8),
+                    title: const Text('查看识别原文'),
+                    children: <Widget>[
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: AppColors.field,
+                          borderRadius: BorderRadius.circular(14),
+                        ),
+                        child: SelectableText(
+                          widget.rawText,
+                          style: const TextStyle(fontSize: 12),
+                        ),
                       ),
-                      child: SelectableText(
-                        widget.rawText,
-                        style: const TextStyle(fontSize: 12),
-                      ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               ),
-            const SizedBox(height: 12),
+            const SizedBox(height: 16),
             DropdownButtonFormField<ExpenseType>(
               initialValue: _type,
               decoration: const InputDecoration(labelText: '类型'),
@@ -582,13 +644,13 @@ class _OcrConfirmSheetState extends State<_OcrConfirmSheet> {
                 if (value != null) setState(() => _type = value);
               },
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: 14),
             MoneyField(
               controller: _amountController,
               label: '金额',
               icon: Icons.attach_money,
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: 14),
             InkWell(
               key: const ValueKey('ocr-pick-datetime'),
               onTap: _pickDateTime,
@@ -600,7 +662,7 @@ class _OcrConfirmSheetState extends State<_OcrConfirmSheet> {
                 child: Text(AppDateFormat.dateTime(_occurredAt)),
               ),
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: 14),
             TextField(
               key: const ValueKey('ocr-note-field'),
               controller: _noteController,
@@ -610,24 +672,28 @@ class _OcrConfirmSheetState extends State<_OcrConfirmSheet> {
               ),
             ),
             if (_error != null) ErrorBanner(message: _error!),
-            const SizedBox(height: 12),
+            const SizedBox(height: 18),
             Row(
               children: <Widget>[
                 Expanded(
-                  child: OutlinedButton.icon(
-                    key: const ValueKey('ocr-cancel-button'),
-                    onPressed: _cancel,
-                    icon: const Icon(Icons.close),
-                    label: const Text('取消'),
+                  child: PressFeedback(
+                    child: OutlinedButton.icon(
+                      key: const ValueKey('ocr-cancel-button'),
+                      onPressed: _cancel,
+                      icon: const Icon(Icons.close),
+                      label: const Text('取消'),
+                    ),
                   ),
                 ),
                 const SizedBox(width: 12),
                 Expanded(
-                  child: FilledButton.icon(
-                    key: const ValueKey('ocr-confirm-button'),
-                    onPressed: _confirm,
-                    icon: Icon(AppIcons.save),
-                    label: const Text('确认入库'),
+                  child: PressFeedback(
+                    child: FilledButton.icon(
+                      key: const ValueKey('ocr-confirm-button'),
+                      onPressed: _confirm,
+                      icon: Icon(AppIcons.save),
+                      label: const Text('确认入库'),
+                    ),
                   ),
                 ),
               ],

@@ -1,10 +1,14 @@
 import 'package:material_ui/material_ui.dart';
 
+import '../../core/app_motion.dart';
 import '../../core/app_state.dart';
 import '../../core/decimal.dart';
+import '../../core/responsive.dart';
+import '../../core/theme.dart';
 import '../../models/forms.dart';
 import '../../models/vehicle.dart';
 import '../../services/asset_calculator.dart';
+import '../../widgets/app_surfaces.dart';
 import '../../widgets/form_fields.dart';
 import 'vehicle_detail_view.dart';
 
@@ -16,22 +20,23 @@ class VehicleListView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final gutter = Responsive.gutterOf(context);
     return Scaffold(
       appBar: AppBar(title: const Text('车辆')),
       body: SafeArea(
         child: LayoutBuilder(
           builder: (context, constraints) {
-            final width = constraints.maxWidth > 720 ? 720.0 : constraints.maxWidth;
             return Center(
-              child: SizedBox(
-                width: width,
+              child: ConstrainedBox(
+                constraints: BoxConstraints(
+                  maxWidth: Responsive.contentMaxWidthOf(context),
+                ),
                 child: Column(
-                  children: [
+                  children: <Widget>[
                     _buildSummary(context),
                     Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                      child: SizedBox(
-                        width: double.infinity,
+                      padding: EdgeInsets.fromLTRB(gutter, 10, gutter, 4),
+                      child: PressFeedback(
                         child: FilledButton.icon(
                           key: const ValueKey('add-vehicle-button'),
                           onPressed: () => _openEditSheet(context),
@@ -53,35 +58,44 @@ class VehicleListView extends StatelessWidget {
 
   Widget _buildSummary(BuildContext context) {
     final total = AssetCalculator.vehicleValue(state.vehicles);
-    return Card(
-      margin: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text('车辆总资产', style: Theme.of(context).textTheme.bodySmall),
-                  const SizedBox(height: 4),
-                  Text(
-                    total.currencyString,
-                    key: const ValueKey('summary-vehicle-total'),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: Theme.of(context)
-                        .textTheme
-                        .titleMedium
-                        ?.copyWith(fontWeight: FontWeight.bold),
-                  ),
-                ],
-              ),
+    return AppCard(
+      margin: EdgeInsets.fromLTRB(Responsive.gutterOf(context), 12,
+          Responsive.gutterOf(context), 0),
+      tint: AppColors.vehicle,
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                Row(
+                  children: <Widget>[
+                    Container(
+                      width: 28,
+                      height: 28,
+                      decoration: BoxDecoration(
+                        color: AppColors.vehicle.withValues(alpha: 0.14),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: const Icon(Icons.directions_car,
+                          size: 16, color: AppColors.vehicle),
+                    ),
+                    const SizedBox(width: 8),
+                    Text('车辆总资产',
+                        style: Theme.of(context).textTheme.bodyMedium),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                AnimatedCurrencyText(
+                  key: const ValueKey('summary-vehicle-total'),
+                  value: total,
+                  style: Theme.of(context).textTheme.headlineSmall,
+                ),
+              ],
             ),
-            const Icon(Icons.directions_car, color: Colors.grey),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
@@ -93,28 +107,60 @@ class VehicleListView extends StatelessWidget {
 
   Widget _buildList(BuildContext context) {
     if (state.vehicles.isEmpty) {
-      return const Center(child: Text('暂无车辆，点击上方按钮新增'));
+      return Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: <Widget>[
+            Container(
+              width: 72,
+              height: 72,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: AppColors.vehicle.withValues(alpha: 0.12),
+              ),
+              child: const Icon(Icons.directions_car,
+                  size: 32, color: AppColors.vehicle),
+            ),
+            const SizedBox(height: 12),
+            Text('暂无车辆，点击上方按钮新增',
+                style: Theme.of(context).textTheme.bodyMedium),
+          ],
+        ),
+      );
     }
     return ListView.builder(
-      padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 20),
       itemCount: state.vehicles.length,
       itemBuilder: (context, index) {
         final vehicle = state.vehicles[index];
-        return Card(
-          child: ListTile(
-            key: ValueKey('vehicle-${vehicle.id}'),
-            leading: const Icon(Icons.directions_car),
-            title: Text(vehicle.model),
-            subtitle: Text(
-              '牌照 ${vehicle.plateNumber} · 累计费用 ${_expenseTotal(vehicle).currencyString}',
-            ),
-            trailing: Text(
-              vehicle.currentValuation.currencyString,
-              style: const TextStyle(fontWeight: FontWeight.w600),
-            ),
-            onTap: () => Navigator.of(context).push(
-              MaterialPageRoute<void>(
-                builder: (_) => VehicleDetailView(state: state, vehicle: vehicle),
+        return StaggerEntrance(
+          index: index,
+          child: AppCard(
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+            child: ListTile(
+              key: ValueKey('vehicle-${vehicle.id}'),
+              leading: CircleAvatar(
+                backgroundColor: AppColors.vehicle.withValues(alpha: 0.13),
+                child: const Icon(Icons.directions_car,
+                    color: AppColors.vehicle, size: 20),
+              ),
+              title: Text(vehicle.model),
+              subtitle: Text(
+                '牌照 ${vehicle.plateNumber} · 累计费用 ${_expenseTotal(vehicle).currencyString}',
+              ),
+              trailing: FittedBox(
+                fit: BoxFit.scaleDown,
+                child: Text(
+                  vehicle.currentValuation.currencyString,
+                  style: Theme.of(context).textTheme.titleSmall
+                      ?.copyWith(color: AppColors.ink),
+                ),
+              ),
+              onTap: () => Navigator.of(context).push(
+                MaterialPageRoute<void>(
+                  builder: (_) =>
+                      VehicleDetailView(state: state, vehicle: vehicle),
+                ),
               ),
             ),
           ),
@@ -127,6 +173,7 @@ class VehicleListView extends StatelessWidget {
     showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
+      showDragHandle: true,
       builder: (_) => VehicleEditSheet(state: state, editing: editing),
     );
   }
@@ -229,72 +276,72 @@ class _VehicleEditSheetState extends State<VehicleEditSheet> {
     const numberKeyboard = TextInputType.numberWithOptions(decimal: true);
     return SafeArea(
       child: SingleChildScrollView(
-        padding: EdgeInsets.only(
-          bottom: MediaQuery.of(context).viewInsets.bottom + 16,
+        padding: EdgeInsets.fromLTRB(
+          20,
+          8,
+          20,
+          MediaQuery.of(context).viewInsets.bottom + 24,
         ),
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Text(
-                widget.editing == null ? '新增车辆' : '编辑车辆',
-                style: Theme.of(context).textTheme.titleLarge,
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                key: const ValueKey('field-model'),
-                controller: _modelController,
-                decoration: const InputDecoration(labelText: '车型'),
-              ),
-              const SizedBox(height: 8),
-              TextField(
-                key: const ValueKey('field-plateNumber'),
-                controller: _plateController,
-                decoration: const InputDecoration(labelText: '牌照'),
-              ),
-              const SizedBox(height: 8),
-              TextField(
-                key: const ValueKey('field-purchasePrice'),
-                controller: _purchasePriceController,
-                keyboardType: numberKeyboard,
-                decoration: const InputDecoration(labelText: '购入价'),
-              ),
-              const SizedBox(height: 8),
-              TextField(
-                key: const ValueKey('field-currentValuation'),
-                controller: _valuationController,
-                keyboardType: numberKeyboard,
-                decoration: const InputDecoration(labelText: '当前估值'),
-              ),
-              const SizedBox(height: 8),
-              InkWell(
-                key: const ValueKey('field-purchaseDate'),
-                onTap: _pickDate,
-                child: InputDecorator(
-                  decoration: const InputDecoration(labelText: '购入日期'),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text(_formatDate(_purchaseDate)),
-                      const Icon(Icons.calendar_today, size: 18),
-                    ],
-                  ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: <Widget>[
+            SectionHeader(
+              title: widget.editing == null ? '新增车辆' : '编辑车辆',
+              subtitle: '估值会计入资产总览',
+              inset: false,
+            ),
+            TextField(
+              key: const ValueKey('field-model'),
+              controller: _modelController,
+              decoration: const InputDecoration(labelText: '车型'),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              key: const ValueKey('field-plateNumber'),
+              controller: _plateController,
+              decoration: const InputDecoration(labelText: '牌照'),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              key: const ValueKey('field-purchasePrice'),
+              controller: _purchasePriceController,
+              keyboardType: numberKeyboard,
+              decoration: const InputDecoration(labelText: '购入价'),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              key: const ValueKey('field-currentValuation'),
+              controller: _valuationController,
+              keyboardType: numberKeyboard,
+              decoration: const InputDecoration(labelText: '当前估值'),
+            ),
+            const SizedBox(height: 12),
+            InkWell(
+              key: const ValueKey('field-purchaseDate'),
+              onTap: _pickDate,
+              child: InputDecorator(
+                decoration: const InputDecoration(labelText: '购入日期'),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: <Widget>[
+                    Text(_formatDate(_purchaseDate)),
+                    const Icon(Icons.calendar_today, size: 18),
+                  ],
                 ),
               ),
-              const SizedBox(height: 8),
-              TextField(
-                key: const ValueKey('field-note'),
-                controller: _noteController,
-                maxLines: 3,
-                decoration: const InputDecoration(labelText: '备注'),
-              ),
-              if (_error != null) ErrorBanner(message: _error!),
-              const SizedBox(height: 16),
-              SaveButton(onPressed: _save),
-            ],
-          ),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              key: const ValueKey('field-note'),
+              controller: _noteController,
+              maxLines: 3,
+              decoration: const InputDecoration(labelText: '备注'),
+            ),
+            if (_error != null) ErrorBanner(message: _error!),
+            const SizedBox(height: 18),
+            PressFeedback(child: SaveButton(onPressed: _save)),
+          ],
         ),
       ),
     );
