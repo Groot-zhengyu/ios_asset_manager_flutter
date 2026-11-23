@@ -1,0 +1,20 @@
+name: ios_asset_manager_flutter
+description: 资产管理应用的 Flutter 双端并行实现，当前先验证数字解析与股票保存反馈闭环。
+publish_to: "none"
+version: 1.0.0+1
+
+environment:
+  sdk: ">=3.4.0 <4.0.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  material_ui: ^1.11.1
+  path_provider: ^2.1.6
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+
+flutter:
+  uses-material-design: true
