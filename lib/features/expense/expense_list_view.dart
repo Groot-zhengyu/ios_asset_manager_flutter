@@ -124,6 +124,7 @@ class _ExpenseListViewState extends State<ExpenseListView> {
                             child: DropdownButtonFormField<ExpenseType?>(
                               key: const ValueKey('expense-type-filter'),
                               initialValue: _typeFilter,
+                              isExpanded: true,
                               decoration: const InputDecoration(
                                 labelText: '类型',
                                 prefixIcon: Icon(Icons.filter_list),
@@ -138,6 +139,8 @@ class _ExpenseListViewState extends State<ExpenseListView> {
                                     value: type,
                                     child: Text(
                                       '${type.group.displayName} · ${type.displayName}',
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
                                     ),
                                   ),
                                 ),
@@ -240,7 +243,13 @@ class _ExpenseListViewState extends State<ExpenseListView> {
               ),
               title: Row(
                 children: <Widget>[
-                  Text(item.type.displayName),
+                  Flexible(
+                    child: Text(
+                      item.type.displayName,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
                   const Spacer(),
                   Text(
                     item.signedCurrencyString,

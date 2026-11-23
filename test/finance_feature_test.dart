@@ -162,6 +162,17 @@ void main() {
     );
   });
 
+  test('OCR 繁体误识别（持有全額/金額变体）仍能解析持有金额与成本', () {
+    final draft = FundScreenshotParser().parse(_raw(
+      '华宝科技混合\n基金代码 007000\n持有全額 12,000.00\n'
+      '买入金額 10,000.00\n持有收益 +2,000.00\n单位净值 1.2000',
+    ));
+    expect(draft.heldAmount?.toStringAsFixed(), '12000.00');
+    expect(draft.costAmount?.toStringAsFixed(), '10000.00');
+    expect(draft.profit?.toStringAsFixed(), '2000.00');
+    expect(draft.validationError, isNull);
+  });
+
   test('截图缺少净值时按 1 估算并提示，字段不完整则拒绝入库', () {
     final draft = FundScreenshotParser().parse(_raw(
       '易方达消费行业\n基金代码 110022\n持有金额 5000.00\n持有收益 -500.00',

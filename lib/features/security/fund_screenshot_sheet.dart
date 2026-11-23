@@ -406,18 +406,21 @@ class _FundScreenshotConfirmSheetState
               controller: _heldController,
               label: '持有金额 / 参考市值',
               icon: Icons.account_balance_wallet_outlined,
+              onChanged: (_) => setState(() {}),
             ),
             const SizedBox(height: 12),
             MoneyField(
               controller: _costController,
               label: '已购买金额（选填）',
               icon: Icons.shopping_bag_outlined,
+              onChanged: (_) => setState(() {}),
             ),
             const SizedBox(height: 12),
             MoneyField(
               controller: _profitController,
               label: '持有收益（亏损填负数）',
               icon: Icons.trending_up,
+              onChanged: (_) => setState(() {}),
             ),
             const SizedBox(height: 12),
             TextField(

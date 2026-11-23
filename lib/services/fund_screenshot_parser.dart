@@ -9,10 +9,10 @@ class FundScreenshotParser {
   static final RegExp _codeLabeled = RegExp(r'(?:基金代码|代码)[^\d]{0,8}(\d{6})');
   static final RegExp _codePlain = RegExp(r'(?<!\d)\d{6}(?!\d)');
   static final RegExp _held = RegExp(
-    r'(持有金额|持仓金额|持有市值|参考市值|市值)[^\d+\-]{0,8}([+\-]?[\d,]+(?:\.\d{1,2})?)',
+    r'(持有[金全][额額]|持仓[金全][额額]|持有市值|参考市值|市值)[^\d+\-]{0,8}([+\-]?[\d,]+(?:\.\d{1,2})?)',
   );
   static final RegExp _cost = RegExp(
-    r'(已购买金额|买入金额|投入金额|已投入|成本金额|持仓成本)[^\d+\-]{0,8}([+\-]?[\d,]+(?:\.\d{1,2})?)',
+    r'(已购买[金全][额額]|买入[金全][额額]|投入[金全][额額]|已投入|成本[金全][额額]|持仓成本)[^\d+\-]{0,8}([+\-]?[\d,]+(?:\.\d{1,2})?)',
   );
   static final RegExp _profit = RegExp(
     r'(持有收益(?!率)|累计收益(?!率)|总收益(?!率)|盈亏|收益(?!率))[^\d+\-]{0,8}([+\-]?[\d,]+(?:\.\d{1,2})?)',
@@ -30,7 +30,7 @@ class FundScreenshotParser {
     r'^[\u4e00-\u9fa5A-Za-z0-9（）()·\s]{2,24}$',
   );
   static const List<String> _nonNameKeywords = <String>[
-    '持有', '收益', '净值', '金额', '代码', '日期', '时间', '涨跌', '累计', '今日', '浮盈', '浮亏',
+    '持有', '收益', '净值', '金额', '全額', '金額', '代码', '日期', '时间', '涨跌', '累计', '今日', '浮盈', '浮亏',
   ];
 
   FundScreenshotDraft parse(OCRRawResult raw) {

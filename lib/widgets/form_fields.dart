@@ -11,12 +11,14 @@ class MoneyField extends StatelessWidget {
     required this.label,
     this.icon = Icons.attach_money,
     this.hint,
+    this.onChanged,
   });
 
   final TextEditingController controller;
   final String label;
   final IconData icon;
   final String? hint;
+  final ValueChanged<String>? onChanged;
 
   @override
   Widget build(BuildContext context) {
@@ -24,6 +26,7 @@ class MoneyField extends StatelessWidget {
       key: ValueKey('field-$label'),
       controller: controller,
       keyboardType: const TextInputType.numberWithOptions(decimal: true),
+      onChanged: onChanged,
       decoration: InputDecoration(
         labelText: label,
         hintText: hint,
