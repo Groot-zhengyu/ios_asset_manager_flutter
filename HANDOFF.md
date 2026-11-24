@@ -218,9 +218,33 @@ flutter build apk --release     # 发布用（会小很多，debug 版约 222M�
 在线构建 30 分钟无字节写入（连接 `108.177.98.207:443`），`gradlew --offline` 报
 `No cached version available for offline mode`——jar 本体在
 `~/.gradle/caches/modules-2/files-2.1/io.flutter/` 里，但仓库元数据已失效。
-代码正确性已由 `flutter analyze` + 69 个测试覆盖；换网络后重新构建即可，或在 Mac/ CI 上出包。
+代码正确性已由 `flutter analyze` + 71 个测试覆盖；换网络后重新构建即可，或在 Mac/ CI 上出包。
 
-测试分布（共 69 个，含参数化 widget 测试的多次运行）：
+### release 构建（2026-11-24 打通）
+
+**中文路径无法出 release 包**：`gen_snapshot` 读 `app.dill` 时报
+`Unable to read file: C:\Users\51199\Desktop\自建小软件——IOS\...`（路径被 GBK 乱码），
+exit 255。junction 也绕不过。**release 必须在纯英文路径构建**，例如：
+
+```bash
+cd <项目根> && tar -cf - --exclude=build --exclude=.git . | (mkdir -p /c/work/am_build && cd /c/work/am_build && tar -xf -)
+cd /c/work/am_build && flutter build apk --release   # → 85.8MB
+```
+
+**R8 与 ML Kit 的冲突（CI 连续失败的真正原因）**：
+- `google_mlkit_text_recognition` 在 `TextRecognizer.initialize` 里按语言分支引用
+  devanagari / japanese / korean 的 `*TextRecognizerOptions`，而项目只打包了
+  `text-recognition-chinese`，R8 报 `Missing classes detected` 直接让构建失败；
+- 仅加 `-dontwarn` 能过 R8，但混淆后 ML Kit 反射注册会抛
+  `NullPointerException: Attempt to invoke virtual method 'java.lang.Class java.lang.Object.getClass()' on a null object reference`，
+  截图识别 100% 失败（模拟器实测抓到该 PlatformException）。
+- 处理：`android/app/proguard-rules.pro` 保留 `com.google.mlkit.**` 与
+  `com.google.android.gms.internal.mlkit_*`；release 关闭
+  `isMinifyEnabled` / `isShrinkResources`（体积 83.1MB → 85.8MB，仅 +2.7MB）。
+  想重新开启混淆时，先确保 ML Kit 的识别与选图两条链路都在真机上验证通过。
+
+**测试分布（共 71 个）**：
+
 - `money_test.dart`：Dec 解析/运算/格式化
 - `security_vehicle_test.dart`：证券保存/现价校验/车辆级联删除
 - `security_edit_feedback_test.dart`：现价 0 / 必填缺失**在表单内就地报错**、千分位与货币符号可保存
