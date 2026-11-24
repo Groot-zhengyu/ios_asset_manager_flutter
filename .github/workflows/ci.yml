@@ -75,7 +75,15 @@ jobs:
           name: Android Release ${{ steps.ver.outputs.tag }}
           body: |
             本版本包含：iOS 健身风格视觉重塑、多类别收支管理、每月固定收支规则、基金截图识别、基金定投管理。
-            - Flutter 3.50.1 / 69 个自动化测试全绿
+
+            ### 本版修复
+            - 基金截图识别：兼容 ML Kit 把「金额」误识别为「全額/金額」，持有金额可自动填充
+            - 截图确认页：修改金额后份额与成本净值反推实时刷新
+            - 费用明细：修复筛选区横向溢出（RIGHT OVERFLOWED BY 32 PIXELS）
+            - Android release 构建：修复 R8 与 ML Kit 冲突导致的构建失败与识别崩溃
+
+            - Flutter 3.50.1 / 71 个自动化测试全绿（analyze 0 issue）
+            - 已在 Android 模拟器（Pixel 6 / API 35）装机实测记账、周期规则、车辆关联、基金识别与定投
             - 日志见对应 commit
           files: dist/app-release.apk
           overwrite_files: true
