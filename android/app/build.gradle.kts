@@ -34,6 +34,15 @@ android {
             // TODO: Add your own signing config for the release build.
             // Signing with the debug keys for now, so `flutter run --release` works.
             signingConfig = signingConfigs.getByName("debug")
+            // ML Kit 内部依赖反射注册模型、image_picker 依赖 ActivityResult 回调，
+            // 开启 R8 后即使在真机上也会出现 NPE / 选图无回调，这里关闭压缩混淆，
+            // 用体积换取 release 包的稳定可用（规则见 proguard-rules.pro）。
+            isMinifyEnabled = false
+            isShrinkResources = false
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro",
+            )
         }
     }
 }
