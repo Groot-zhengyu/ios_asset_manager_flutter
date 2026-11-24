@@ -218,7 +218,7 @@ flutter build apk --release     # 发布用（会小很多，debug 版约 222M�
 在线构建 30 分钟无字节写入（连接 `108.177.98.207:443`），`gradlew --offline` 报
 `No cached version available for offline mode`——jar 本体在
 `~/.gradle/caches/modules-2/files-2.1/io.flutter/` 里，但仓库元数据已失效。
-代码正确性已由 `flutter analyze` + 71 个测试覆盖；换网络后重新构建即可，或在 Mac/ CI 上出包。
+代码正确性已由 `flutter analyze` + 73 个测试覆盖；换网络后重新构建即可，或在 Mac/ CI 上出包。
 
 ### release 构建（2026-11-24 打通）
 
@@ -243,7 +243,7 @@ cd /c/work/am_build && flutter build apk --release   # → 85.8MB
   `isMinifyEnabled` / `isShrinkResources`（体积 83.1MB → 85.8MB，仅 +2.7MB）。
   想重新开启混淆时，先确保 ML Kit 的识别与选图两条链路都在真机上验证通过。
 
-**测试分布（共 71 个）**：
+**测试分布（共 73 个）**：
 
 - `money_test.dart`：Dec 解析/运算/格式化
 - `security_vehicle_test.dart`：证券保存/现价校验/车辆级联删除
@@ -256,6 +256,7 @@ cd /c/work/am_build && flutter build apk --release   # → 85.8MB
 - `market_data_test.dart`：腾讯行情文本解析、0 价与 500 失败保留、天天基金 JSONP 估值/净值回落
 - `market_refresh_summary_test.dart`：刷新结论的四种文案（更新 / 价格无变化 / 未取到 / 无需刷新）
 - `data_transfer_test.dart`：原版 JSON / CSV 导入、按 id 去重、导出格式、设置持久化与 PIN 哈希
+- `ios_vision_ocr_test.dart`：iOS Vision 通道的中文行顺序 / 置信度 / 空结果 / 原生异常转译
 
 集成测试（真机/模拟器）：
 ```bash
@@ -267,14 +268,20 @@ flutter test integration_test/app_integration_test.dart -d <deviceId>
 ### iOS 构建（必须在 macOS + Xcode 上）
 
 ```bash
-open ios/Runner.xcworkspace    # 或直接 flutter build ios
-flutter build ipa --release
+flutter pub get
+flutter build ios --release --no-codesign   # 无签名，只验证能编译
+flutter build ipa --release                 # 有签名后才可安装
 ```
 
-- Bundle ID：`com.groot.assetmanager.ios_asset_manager_flutter`
-- Deployment target：**17.0**（已在 `ios/Runner.xcodeproj/project.pbxproj` 设置）
-- 上架/分发仍需 Apple 开发者账号与签名配置。
-- **交接时 iOS 从未构建过**，第一次在 Mac 上编译请预留排查时间。
+目标设备：用户手机为 **iPhone 15 Pro Max / iOS 27.3**，Deployment target 17.0 完全覆盖。
+
+- Bundle ID（工程里的真实值）：`com.groot.assetmanager.iosAssetManagerFlutter`
+- Deployment target：**17.0**（`ios/Runner.xcodeproj/project.pbxproj`，Debug/Release/Profile 均已设置）
+- 项目**没有 Podfile**，Flutter 3.50 用 Swift Package Manager 管理插件；在 Xcode 里打开 `ios/Runner.xcodeproj`，不要找 `.xcworkspace`。
+- 连真机跑：Target → Signing & Capabilities → Team 选自己的 Apple ID → 手机开「开发者模式」→ USB 连上 → Cmd+R。免费账号 7 天过期，长期安装走付费账号 TestFlight/Ad Hoc，或 AltStore/Sideloadly 自签。
+- `ios/Runner/Info.plist` 已配相机、相册、Face ID 用途描述，并设 `ITSAppUsesNonExemptEncryption=false`，上传 TestFlight 不会再问出口合规问题。
+- CI 新增 `build-ios` job（macos-latest + `flutter build ios --release --no-codesign`），每次 push 会验证 iOS 可编译并上传未签名的 `Runner.app`。
+- **Windows 本机无法编译 iOS**，交接时 iOS 尚未真机验证；CI 是编译层面的兜底。
 
 ---
 
@@ -289,7 +296,7 @@ flutter build ipa --release
 3. **真实行情**：`services/market_data_service.dart`，股票走腾讯 `qt.gtimg.cn`（GBK，按 `~` 取第 4 字段），基金走天天基金估值 `fundgz.1234567.com.cn`；只写回 > 0 的价格，失败保留原值。手动输入价格降级为折叠的兜底入口。
 4. **导出走系统分享**：`services/data_transfer_service.dart` 写临时文件后调 `share_plus`，分享面板可保存到文件 / 发送；同时保留「复制 CSV 文本」。
 5. **与原版数据互通**：同一服务实现导入，支持原版 `ExportDocument` JSON（金额可能是数字或字符串）与原版三段式 CSV；按 `id` 去重合并，重复导入不产生重复记录。
-6. **CI**：`.github/workflows/ci.yml`，analyze + test 后构建 Release APK 并上传产物。
+6. **CI**：`.github/workflows/ci.yml`，analyze + test 后构建 Release APK 并上传产物；新增 `build-ios` job 在 macOS 上做 `--no-codesign` 编译验证并上传未签名 App。
 7. **应用图标**：`assets/icon/` + `flutter_launcher_icons` 已生成 Android（含 adaptive）与 iOS 全套图标。
 8. **生物识别默认关闭**：`biometricEnabled` 默认值改为 `false`。原因：未录入指纹的设备上开启 App 锁会立刻自动弹生物识别并直接失败。现在锁屏只显示 PIN + 一个可点的「指纹 / 面容解锁」按钮，用户在设置页看到「可用：指纹」后再手动开启。
 9. **行情刷新结论文案**：`MarketRefreshResult` 增加 `fetched` 与 `summarize()`。原先价格没变化时提示「已更新 0 条」看起来像失败；现在区分「已更新 N 条」/「行情已刷新，N 条价格无变化」/「未取到行情」/「没有需要刷新的持仓」四种结论（`test/market_refresh_summary_test.dart` 覆盖）。
@@ -297,8 +304,8 @@ flutter build ipa --release
 
 ### 仍未完成
 
-1. **iOS 从未构建验证**（见第六节）。首次在 Mac 上编译请预留排查时间。
-2. **iOS 的中文 OCR 受插件限制**：`google_mlkit_text_recognition` 在 iOS 上只支持 Latin 字符集，请求中文会优雅回退到 Latin 识别器——不会崩溃，但中文会被识别成乱码（数字、金额通常仍可识别）。若要在 iOS 上真正识别中文票据，需要自己写 platform channel 调用 Apple Vision（`VNRecognizeTextRequest` + `zh-Hans`），或换用其他 OCR 方案。Android 侧中文识别是完整可用的。
+1. **iOS 未在真机验证**（见第六节）：Windows 上没有 Xcode，只能靠 CI 的 `--no-codesign` 构建确认可编译；面容 ID、相机拍照、系统分享在真机上的手感仍需用户自己确认。
+2. ~~iOS 的中文 OCR 受插件限制~~ **已解决**：`AppDelegate.swift` 注册 `IOSVisionOCR` MethodChannel（`com.groot.assetmanager/ios_vision_ocr`），用 Apple Vision `VNRecognizeTextRequest` + `zh-Hans` 离线识别并按屏幕阅读顺序回传；`OcrService` 在 iOS 自动走该通道，Android 继续用 ML Kit。`zh-Hans` 失败时回退 `en-US` 至少保住金额/日期。测试见 `test/ios_vision_ocr_test.dart`。
 3. **模拟器无法验证的两项**：相机拍照（模拟器无真实摄像头，只能用相册选图）与生物识别（模拟器未录入指纹；强制触发 `BiometricPrompt` 会让 x86_64 模拟器的指纹 HAL 挂掉，实测三次都在弹窗瞬间整个 emulator 进程退出）。代码路径已实现，需真机确认。
 4. 行情接口是免费公开接口，字段可能变化；若某天全部失败，先看 `MarketDataService` 的解析分支。
 5. 金额精度目前是 1e-6 定点，够用；若将来要支持更多小数位需改 `Dec` 的 `_scale` 并全量回归。

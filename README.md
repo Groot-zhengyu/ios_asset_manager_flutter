@@ -7,12 +7,12 @@
 ## 功能
 
 - **总览**：总资产 / 总盈亏汇总动画、手绘环形图按四类资产（股票 / 基金 / 车辆 / 现金）分解、分类下钻、底部固定「快速记账」入口。
-- **记账**：**拍照 / 相册 OCR**（ML Kit 中文模型离线识别，图片不上传）+ 粘贴文本兜底 + 手动记账；识别只产草稿，确认才生成费用，取消不留痕。
+- **记账**：**拍照 / 相册 OCR**（Android 用 ML Kit 中文模型、iOS 用 Apple Vision `zh-Hans`，均离线识别、图片不上传）+ 粘贴文本兜底 + 手动记账；识别只产草稿，确认才生成费用，取消不留痕。
 - **费用**：类型 / 日期筛选、明细增删、手动与 OCR 两种来源、月度与类型分布报表。
 - **证券**：持仓增删、市值 / 盈亏 / 盈亏率、**真实行情刷新**（股票走腾讯行情、基金走天天基金估值），手动输入价格作为兜底。
 - **车辆**：车辆增删、详情编辑、累计费用、删除车辆级联清理其费用。
 - **设置**：App 锁（**指纹 / 面容 + PIN**，设置持久化，进后台自动上锁）、网络行情、**导出走系统分享面板**（CSV / JSON）、**导入原版数据**、现金账户管理、口径与隐私说明。
-- **CI**：GitHub Actions 每次提交跑 `flutter analyze` + `flutter test`，并构建 Release APK 作为产物。
+- **CI**：GitHub Actions 每次提交跑 `flutter analyze` + `flutter test`，构建 Release APK 作为产物，并在 macOS 上验证 iOS 可编译。
 
 ## 业务口径（与原版一致）
 
@@ -46,7 +46,7 @@ lib/
 ```bash
 flutter pub get
 flutter analyze                 # 0 issues
-flutter test                    # 42 个单元 / Widget 测试
+flutter test                    # 73 个单元 / Widget 测试
 
 # 真机或模拟器集成测试（含 ML Kit 真实识别）
 # 需先把一张票据图片推到 /sdcard/Download/receipt.png
@@ -56,10 +56,24 @@ flutter test integration_test/app_integration_test.dart -d <deviceId>
 flutter build apk --debug       # 产物：build/app/outputs/flutter-apk/app-debug.apk
 flutter build apk --release
 
-# iOS（必须 macOS + Xcode）
-flutter build ios
-flutter build ipa --release
+# iOS（必须 macOS + Xcode；Windows 上无法编译）
+flutter build ios --release --no-codesign   # 仅验证可编译，不能装到手机
+flutter build ipa --release                 # 需先配置 Team / Provisioning
 ```
+
+### 在 iPhone 15 Pro Max（iOS 27.3）上运行
+
+1. 在 Mac 上装 Xcode（建议 16 或更高），执行 `flutter pub get`。
+2. 打开 `ios/Runner.xcodeproj`（本项目没有 `Podfile`，走 Swift Package Manager，不要找 `.xcworkspace`）。
+3. 选 Target `Runner` → Signing & Capabilities → Team 选自己的 Apple ID（免费账号即可真机调试），
+   若 Bundle ID `com.groot.assetmanager.iosAssetManagerFlutter` 已被占用就改一个唯一值。
+4. 手机开启「开发者模式」（iOS 16+：设置 → 隐私与安全性 → 开发者模式），USB 连接并选为运行目标，按 Cmd+R。
+5. 免费 Apple ID 的安装包 7 天后会失效，需要重新编译；要长期安装请用付费开发者账号走 TestFlight/Ad Hoc，
+   或用 AltStore / Sideloadly 自签（同样 7 天续签）。
+
+**中文票据识别在 iOS 上是完整可用的**：`AppDelegate.swift` 里注册了 `IOSVisionOCR` 原生通道，
+用 Apple Vision `VNRecognizeTextRequest` 指定 `zh-Hans`，完全离线；`OcrService` 在 iOS 自动走这条通道，
+Android 仍走 ML Kit 中文模型。两条路径的测试见 `test/ios_vision_ocr_test.dart`。
 
 国内网络提示：
 - Flutter 下载源可用 `FLUTTER_STORAGE_BASE_URL=https://storage.flutter-io.cn`、`PUB_HOSTED_URL=https://pub.flutter-io.cn`。
